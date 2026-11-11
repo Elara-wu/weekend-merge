@@ -11,14 +11,17 @@ export const AgentStateSchema = z.enum([
   "FINALIZE",
 ]);
 
+const StartTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+const EndTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^24:00$/);
+
 export const PlanSetupSchema = z.object({
   city: z.literal("上海"),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((date) => {
     const timestamp = Date.parse(`${date}T00:00:00Z`);
     return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === date;
   }, "Date must be a real calendar day"),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  startTime: StartTimeSchema,
+  endTime: EndTimeSchema,
   budget: z.number().min(100).max(2000),
   startingArea: z.string().min(1),
 });
@@ -50,8 +53,8 @@ export const ItineraryStopSchema = z.object({
   placeId: z.string().min(1),
   name: z.string().min(1),
   area: z.string().min(1),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  startTime: StartTimeSchema,
+  endTime: EndTimeSchema,
   cost: z.number().nonnegative(),
   latitude: z.number(),
   longitude: z.number(),

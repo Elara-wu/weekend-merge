@@ -38,6 +38,41 @@ function check(overrides: {
 }
 
 describe("validatePlan", () => {
+  it("accepts a stop ending at midnight when the venue closes at 24:00", () => {
+    const latePlace = shanghaiPlaces.find((item) => item.placeId === "starbucks-reserve-roastery")!;
+    const latePlan = { ...plan, stops: [{ ...plan.stops[0], placeId: latePlace.placeId,
+      name: latePlace.name, tags: latePlace.tags, startTime: "23:00", endTime: "24:00" }] };
+    expect(check({ plan: latePlan, setup: { ...setup, startTime: "22:00", endTime: "24:00" } }).valid).toBe(true);
+  });
+
+  it.each([
+    ["拥挤", "排队"], ["辛辣", "川菜"], ["酒吧", "酒吧"],
+  ])("rejects %s through related place tag %s", (avoid, tag) => {
+    const taggedPlace = { ...place, tags: [...place.tags, tag] };
+    const result = check({
+      places: [...shanghaiPlaces.filter((item) => item.placeId !== place.placeId), taggedPlace],
+      preferences: { a: { ...person, avoid: [avoid] }, b: person },
+    });
+    expect(result.violations).toContainEqual(expect.objectContaining({
+      code: "AVOID_TAG_MATCHED", affectedStopIds: ["stop-1"],
+    }));
+  });
+
+  it("enforces long-walk, early-start and outdoor-sun avoidance", () => {
+    expect(check({ walkingDistanceKm: 2, preferences: { a: { ...person, avoid: ["长距离步行"] }, b: person } })
+      .violations.map((item) => item.code)).toContain("WALKING_LIMIT_EXCEEDED");
+    const earlyPlace = shanghaiPlaces.find((item) => item.placeId === "manner-xuhui-riverside")!;
+    const earlyPlan = { ...plan, stops: [{ ...plan.stops[0], placeId: earlyPlace.placeId,
+      name: earlyPlace.name, tags: earlyPlace.tags, startTime: "09:00", endTime: "10:00" }] };
+    expect(check({ plan: earlyPlan, setup: { ...setup, startTime: "09:00" },
+      preferences: { a: { ...person, avoid: ["早起"] }, b: person } }).violations)
+      .toContainEqual(expect.objectContaining({ code: "AVOID_TAG_MATCHED", affectedStopIds: ["stop-1"] }));
+    const park = shanghaiPlaces.find((item) => item.placeId === "fuxing-park")!;
+    const outdoorPlan = { ...plan, stops: [{ ...plan.stops[0], placeId: park.placeId,
+      name: park.name, tags: park.tags }] };
+    expect(check({ plan: outdoorPlan, preferences: { a: { ...person, avoid: ["户外日晒"] }, b: person } }).violations)
+      .toContainEqual(expect.objectContaining({ code: "AVOID_TAG_MATCHED", affectedStopIds: ["stop-1"] }));
+  });
   it("accepts a plan within all hard constraints", () => {
     expect(check()).toEqual({ valid: true, violations: [], warnings: [] });
   });

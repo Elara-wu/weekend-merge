@@ -1,6 +1,7 @@
 import { PlanSetupSchema, type Itinerary, type PersonPreferences, type PlanSetup } from "../../../../src/contracts/agent";
 
 import type { Place } from "./contracts";
+import { effectiveWalkingLimitKm, violatesAvoidedStop } from "./preferences";
 
 export type ValidationCode =
   | "BUDGET_EXCEEDED"
@@ -30,7 +31,8 @@ export type ValidatePlanInput = {
 const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function minutes(time: string): number {
+function minutes(time: string, allowMidnight = false): number {
+  if (allowMidnight && time === "24:00") return 1440;
   const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
   return match ? Number(match[1]) * 60 + Number(match[2]) : Number.NaN;
 }
@@ -39,7 +41,7 @@ function isOpen(place: Place, date: string, startTime: string, endTime: string):
   const weekday = WEEKDAYS[new Date(`${date}T12:00:00+08:00`).getUTCDay()];
   const intervals = place.weeklyOpeningHours.find((group) => group.days.includes(weekday))?.intervals ?? [];
   const start = minutes(startTime);
-  const end = minutes(endTime);
+  const end = minutes(endTime, true);
   if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
   if (place.lastAdmissionTime && start > minutes(place.lastAdmissionTime)) return false;
   return intervals.some(({ open, close }) => {
@@ -65,10 +67,10 @@ export function validatePlan(input: ValidatePlanInput): ValidationResult {
   }
   const placeById = new Map(places.map((place) => [place.placeId, place]));
   const usedPlaces = new Set<string>();
-  const avoidedTags = new Set([...preferences.a.avoid, ...preferences.b.avoid]);
+  const avoided = [...preferences.a.avoid, ...preferences.b.avoid];
   const planDateMs = Date.parse(`${setup.date}T00:00:00Z`);
   const rangeStart = minutes(setup.startTime);
-  const rangeEnd = minutes(setup.endTime);
+  const rangeEnd = minutes(setup.endTime, true);
 
   const totalCost = Math.max(plan.totalCost, plan.stops.reduce((sum, stop) => sum + stop.cost, 0));
   if (totalCost > setup.budget) {
@@ -76,14 +78,14 @@ export function validatePlan(input: ValidatePlanInput): ValidationResult {
   }
 
   const walkingDistanceKm = input.walkingDistanceKm ?? plan.totalDistanceKm;
-  const walkingLimitKm = Math.min(preferences.a.walkingLimitKm, preferences.b.walkingLimitKm);
+  const walkingLimitKm = effectiveWalkingLimitKm(preferences);
   if (!Number.isFinite(walkingDistanceKm) || walkingDistanceKm < 0 || walkingDistanceKm > walkingLimitKm) {
     violations.push({ code: "WALKING_LIMIT_EXCEEDED", message: "Walking distance exceeds a participant's limit", affectedStopIds: plan.stops.map((stop) => stop.id) });
   }
 
   for (const stop of plan.stops) {
     const start = minutes(stop.startTime);
-    const end = minutes(stop.endTime);
+    const end = minutes(stop.endTime, true);
     if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(rangeStart) ||
       !Number.isFinite(rangeEnd) || start < rangeStart || end > rangeEnd || start >= end) {
       violations.push({ code: "OUTSIDE_TIME_RANGE", message: "Stop falls outside the plan time range", affectedStopIds: [stop.id] });
@@ -99,8 +101,8 @@ export function validatePlan(input: ValidatePlanInput): ValidationResult {
       violations.push({ code: "PLACE_CLOSED", message: "Place is not verified open for the stop", affectedStopIds: [stop.id] });
     }
 
-    if ([...stop.tags, ...(place?.tags ?? [])].some((tag) => avoidedTags.has(tag))) {
-      violations.push({ code: "AVOID_TAG_MATCHED", message: "Stop has an avoided tag", affectedStopIds: [stop.id] });
+    if (violatesAvoidedStop(avoided, [...stop.tags, ...(place?.tags ?? [])], place?.indoor ?? true, stop.startTime)) {
+      violations.push({ code: "AVOID_TAG_MATCHED", message: "Stop conflicts with an avoidance preference", affectedStopIds: [stop.id] });
     }
 
     if (place && Number.isFinite(planDateMs) && planDateMs - Date.parse(`${place.lastVerifiedAt}T00:00:00Z`) > 90 * DAY_MS) {

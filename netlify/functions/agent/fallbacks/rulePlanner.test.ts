@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ItinerarySchema, type PlanRequest } from "../../../../src/contracts/agent";
 import { shanghaiPlaces } from "../tools/places";
 import { estimateRoute } from "../tools/route";
+import { interestMatchesTags } from "../tools/preferences";
 import { validatePlan } from "../tools/validator";
 import { analyzeConsensus } from "./consensus";
 import { NoValidPlanError, createRulePlans } from "./rulePlanner";
@@ -40,6 +41,14 @@ describe("deterministic fallback", () => {
     expect(consensus.constraints).toEqual(expect.arrayContaining([
       "总预算 300 元", "步行上限 3 公里", "活动时间 11:00-18:00", "避开：排队",
     ]));
+  });
+
+  it("reports the effective walking cap when long walks are avoided", () => {
+    const modified = { ...request, preferences: {
+      a: { ...request.preferences.a, avoid: ["长距离步行"] },
+      b: request.preferences.b,
+    } };
+    expect(analyzeConsensus(modified).constraints).toContain("步行上限 1 公里");
   });
 
   it("produces three distinct, schema-valid plans from curated venues", () => {
@@ -94,6 +103,15 @@ describe("deterministic fallback", () => {
     expect(headroom.totalCost).toBeLessThanOrEqual(10);
   });
 
+  it("scores shared UI interests through catalog tags", () => {
+    const interestRequest = { ...request, preferences: {
+      a: { ...request.preferences.a, interests: ["逛店"] },
+      b: { ...request.preferences.b, interests: ["逛店"] },
+    } };
+    const [shared] = createRulePlans({ request: interestRequest, places: shanghaiPlaces });
+    expect(shared.stops.some((stop) => interestMatchesTags("逛店", stop.tags))).toBe(true);
+  });
+
   it("reports insufficient distinct combinations when only two venues are available", () => {
     const places = shanghaiPlaces.filter((place) =>
       ["shanghai-book-city", "manner-xuhui-riverside"].includes(place.placeId));
@@ -108,7 +126,7 @@ describe("deterministic fallback", () => {
     }
   });
 
-  it("returns a typed no-plan error when the only possible stop would end at 24:00", () => {
+  it("schedules and validates a stop ending at midnight", () => {
     const allDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
     const places = [
       {
@@ -117,15 +135,64 @@ describe("deterministic fallback", () => {
         }],
       },
       {
-        ...shanghaiPlaces[3], placeId: "late-bookstore", weeklyOpeningHours: [{
+        ...shanghaiPlaces[3], placeId: "early-bookstore", weeklyOpeningHours: [{
+          days: [...allDays], intervals: [{ open: "21:00", close: "22:00" }],
+        }],
+      },
+      {
+        ...shanghaiPlaces[9], placeId: "late-park", weeklyOpeningHours: [{
+          days: [...allDays], intervals: [{ open: "23:15", close: "24:00" }],
+        }],
+      },
+      {
+        ...shanghaiPlaces[12], placeId: "late-view", weeklyOpeningHours: [{
           days: [...allDays], intervals: [{ open: "23:15", close: "24:00" }],
         }],
       },
     ];
-    expect(() => createRulePlans({
-      request: { ...request, setup: { ...request.setup, startTime: "21:00", endTime: "24:00" } },
-      places,
-    })).toThrowError(NoValidPlanError);
+    const midnightRequest = { ...request, setup: { ...request.setup, startTime: "21:00", endTime: "24:00" } };
+    const plans = createRulePlans({ request: midnightRequest, places });
+    expect(plans).toHaveLength(3);
+    expect(plans.some((plan) => plan.stops.some((stop) => stop.endTime === "24:00"))).toBe(true);
+    for (const plan of plans) {
+      expect(validatePlan({ plan, setup: midnightRequest.setup, preferences: request.preferences,
+        places, lockedStopIds: [], walkingDistanceKm: 0 }).valid).toBe(true);
+    }
+  });
+
+  it("uses semantic avoidance when selecting and scheduling venues", () => {
+    const semanticRequest = { ...request, preferences: {
+      a: { ...request.preferences.a, avoid: ["拥挤", "长距离步行", "早起", "户外日晒"] },
+      b: request.preferences.b,
+    }, setup: { ...request.setup, startTime: "09:00", endTime: "21:00" } };
+    const plans = createRulePlans({ request: semanticRequest, places: shanghaiPlaces });
+    for (const plan of plans) {
+      expect(plan.stops.every((stop) => !stop.tags.includes("排队") && stop.startTime >= "10:00")).toBe(true);
+      expect(plan.stops.every((stop) => {
+        const place = shanghaiPlaces.find((item) => item.placeId === stop.placeId)!;
+        return place.indoor || stop.startTime >= "18:00";
+      })).toBe(true);
+      const route = estimateRoute({ stops: plan.stops, mode: "mixed" });
+      expect(route.legs.filter((leg) => leg.mode === "walking").reduce((sum, leg) => sum + leg.distanceKm, 0)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("reports observed no-plan causes without guessing from an unrelated avoid label", () => {
+    expect.assertions(2);
+    try {
+      createRulePlans({ request: { ...request, preferences: { ...request.preferences,
+        a: { ...request.preferences.a, avoid: ["酒吧"] } } }, places: [] });
+    } catch (error) {
+      expect(error).toMatchObject({ code: "NO_VALID_PLAN", violatedConstraintCodes: ["INSUFFICIENT_CANDIDATES"] });
+    }
+    const shortRequest = { ...request, setup: { ...request.setup, startTime: "11:00", endTime: "11:30" } };
+    const alwaysOpen = shanghaiPlaces.filter((place) =>
+      ["shanghai-book-city", "manner-xuhui-riverside", "fuxing-park"].includes(place.placeId));
+    try {
+      createRulePlans({ request: shortRequest, places: alwaysOpen });
+    } catch (error) {
+      expect(error).toMatchObject({ code: "NO_VALID_PLAN", violatedConstraintCodes: ["OUTSIDE_TIME_RANGE"] });
+    }
   });
 
   it("throws a typed error when avoidance excludes every venue", () => {

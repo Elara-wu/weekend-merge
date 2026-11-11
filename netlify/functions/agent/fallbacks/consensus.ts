@@ -3,6 +3,7 @@ import {
   type ConsensusSummary,
   type PlanRequest,
 } from "../../../../src/contracts/agent";
+import { effectiveWalkingLimitKm } from "../tools/preferences";
 
 export function analyzeConsensus(request: PlanRequest): ConsensusSummary {
   const { a, b } = request.preferences;
@@ -19,7 +20,7 @@ export function analyzeConsensus(request: PlanRequest): ConsensusSummary {
   const avoided = [...new Set([...a.avoid, ...b.avoid])];
   const constraints = [
     `总预算 ${request.setup.budget} 元`,
-    `步行上限 ${Math.min(a.walkingLimitKm, b.walkingLimitKm)} 公里`,
+    `步行上限 ${effectiveWalkingLimitKm(request.preferences)} 公里`,
     `活动时间 ${request.setup.startTime}-${request.setup.endTime}`,
     ...avoided.map((tag) => `避开：${tag}`),
   ];

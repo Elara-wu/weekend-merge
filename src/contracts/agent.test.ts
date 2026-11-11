@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AgentEventSchema,
+  ItinerarySchema,
   PlanSetupSchema,
   PlanRequestSchema,
   ReplanRequestSchema,
@@ -28,6 +29,13 @@ const validSetup = {
 } as const;
 
 describe("PlanSetupSchema", () => {
+  it("accepts midnight only as an end time", () => {
+    expect(PlanSetupSchema.safeParse({ ...validSetup, endTime: "24:00" }).success).toBe(true);
+    expect(PlanSetupSchema.safeParse({ ...validSetup, startTime: "24:00" }).success).toBe(false);
+    expect(PlanSetupSchema.safeParse({ ...validSetup, endTime: "24:01" }).success).toBe(false);
+    expect(ItinerarySchema.safeParse({ ...validItinerary, stops: [{ ...validItinerary.stops[0], endTime: "24:00" }] }).success).toBe(true);
+    expect(ItinerarySchema.safeParse({ ...validItinerary, stops: [{ ...validItinerary.stops[0], startTime: "24:00" }] }).success).toBe(false);
+  });
   it.each(["2026-11-31", "2026-02-29", "2026-11-1", "next Saturday"])(
     "rejects an impossible or non-ISO calendar date: %s",
     (date) => {

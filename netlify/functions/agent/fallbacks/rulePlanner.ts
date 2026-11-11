@@ -2,6 +2,7 @@ import { ItinerarySchema, type Itinerary, type PlanRequest } from "../../../../s
 import { calculateBudget } from "../tools/budget";
 import { PlaceListSchema, type Place, type EstimateRouteOutput, type CalculateBudgetInput } from "../tools/contracts";
 import { searchPlaces } from "../tools/places";
+import { effectiveWalkingLimitKm, expandedAvoidTags, interestMatchesTags, violatesAvoidedStop } from "../tools/preferences";
 import { estimateRoute } from "../tools/route";
 import { validatePlan, type ValidationCode } from "../tools/validator";
 import type { WeatherOutput } from "../tools/weather";
@@ -48,17 +49,20 @@ function clock(total: number): string {
 }
 
 function openAt(place: Place, date: string, start: number, end: number): boolean {
-  if (end >= 1440) return false;
+  if (end > 1440) return false;
+  const endDate = end === 1440
+    ? new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)
+    : date;
   return searchPlaces({
     openBetween: {
       start: `${date}T${clock(start)}:00+08:00`,
-      end: `${date}T${clock(end)}:00+08:00`,
+      end: `${endDate}T${end === 1440 ? "00:00" : clock(end)}:00+08:00`,
     },
     limit: 50,
   }, [place]).places.length === 1;
 }
 
-function schedule(pair: Pair, request: PlanRequest): Array<{ start: number; end: number }> | undefined {
+function schedule(pair: Pair, request: PlanRequest, avoided: readonly string[]): Array<{ start: number; end: number }> | undefined {
   const rangeStart = minutes(request.setup.startTime);
   const rangeEnd = minutes(request.setup.endTime);
   if (rangeStart >= rangeEnd) return undefined;
@@ -66,11 +70,13 @@ function schedule(pair: Pair, request: PlanRequest): Array<{ start: number; end:
   const [first, second] = pair.places;
   for (let firstStart = rangeStart; firstStart + durations[first.category] <= rangeEnd; firstStart += 15) {
     const firstEnd = firstStart + durations[first.category];
-    if (!openAt(first, request.setup.date, firstStart, firstEnd)) continue;
+    if (!openAt(first, request.setup.date, firstStart, firstEnd) ||
+      violatesAvoidedStop(avoided, first.tags, first.indoor, clock(firstStart))) continue;
     const earliestSecond = firstEnd + pair.route.legs[0].durationMinutes;
-    for (let secondStart = earliestSecond; secondStart + durations[second.category] <= rangeEnd; secondStart += 15) {
+    for (let secondStart = Math.ceil(earliestSecond / 15) * 15; secondStart + durations[second.category] <= rangeEnd; secondStart += 15) {
       const secondEnd = secondStart + durations[second.category];
-      if (openAt(second, request.setup.date, secondStart, secondEnd)) {
+      if (openAt(second, request.setup.date, secondStart, secondEnd) &&
+        !violatesAvoidedStop(avoided, second.tags, second.indoor, clock(secondStart))) {
         return [{ start: firstStart, end: firstEnd }, { start: secondStart, end: secondEnd }];
       }
     }
@@ -116,7 +122,7 @@ export function createRulePlans(context: RulePlanContext): Itinerary[] {
   const { request, weather } = context;
   const catalog = PlaceListSchema.parse(context.places);
   const avoided = [...new Set([...request.preferences.a.avoid, ...request.preferences.b.avoid])];
-  const searchable = searchPlaces({ excludedTags: avoided, limit: 50 }, catalog).places;
+  const searchable = searchPlaces({ excludedTags: expandedAvoidTags(avoided), limit: 50 }, catalog).places;
   const shared = analyzeConsensus(request).shared;
   const interests = [...new Set([...request.preferences.a.interests, ...request.preferences.b.interests])];
   const rainLikely = weather?.hourly.some((hour) => hour.precipitationProbability >= 50) ?? false;
@@ -128,13 +134,13 @@ export function createRulePlans(context: RulePlanContext): Itinerary[] {
       const route = estimateRoute({ stops: [first, second], mode: "mixed" });
       const walkingKm = route.legs.filter((leg) => leg.mode === "walking")
         .reduce((sum, leg) => sum + leg.distanceKm, 0);
-      if (walkingKm > Math.min(request.preferences.a.walkingLimitKm, request.preferences.b.walkingLimitKm)) continue;
+      if (walkingKm > effectiveWalkingLimitKm(request.preferences)) continue;
       const places: [Place, Place] = [first, second];
       pairs.push({
         places,
         route,
-        sharedHits: places.reduce((sum, place) => sum + place.tags.filter((tag) => shared.includes(tag)).length, 0),
-        interestHits: places.reduce((sum, place) => sum + place.tags.filter((tag) => interests.includes(tag)).length + (rainLikely && place.indoor ? 1 : 0), 0),
+        sharedHits: places.reduce((sum, place) => sum + shared.filter((interest) => interestMatchesTags(interest, place.tags)).length, 0),
+        interestHits: places.reduce((sum, place) => sum + interests.filter((interest) => interestMatchesTags(interest, place.tags)).length + (rainLikely && place.indoor ? 1 : 0), 0),
         cost: pairCost(places, route, request.setup.budget),
       });
     }
@@ -145,7 +151,10 @@ export function createRulePlans(context: RulePlanContext): Itinerary[] {
   const plans: Itinerary[] = [];
   const usedPairs = new Set<string>();
   const violations = new Set<RulePlanConstraintCode>();
-  if (searchable.length < 2) violations.add(avoided.length ? "AVOID_TAG_MATCHED" : "PLACE_CLOSED");
+  if (searchable.length < 2) {
+    violations.add("INSUFFICIENT_CANDIDATES");
+    if (searchable.length < catalog.length) violations.add("AVOID_TAG_MATCHED");
+  }
   else if (pairs.length === 0) violations.add("WALKING_LIMIT_EXCEEDED");
 
   for (const [strategy, title] of titles.entries()) {
@@ -158,10 +167,16 @@ export function createRulePlans(context: RulePlanContext): Itinerary[] {
         violations.add("BUDGET_EXCEEDED");
         continue;
       }
-      const times = schedule(pair, request);
+      const times = schedule(pair, request, avoided);
       if (!times) {
-        violations.add("PLACE_CLOSED");
-        violations.add("OUTSIDE_TIME_RANGE");
+        const minimumMinutes = durations[pair.places[0].category] + pair.route.legs[0].durationMinutes + durations[pair.places[1].category];
+        if (minutes(request.setup.endTime) - minutes(request.setup.startTime) < minimumMinutes) {
+          violations.add("OUTSIDE_TIME_RANGE");
+        } else if (schedule(pair, request, [])) {
+          violations.add("AVOID_TAG_MATCHED");
+        } else {
+          violations.add("PLACE_CLOSED");
+        }
         continue;
       }
       const stops = pair.places.map((place, index) => ({
