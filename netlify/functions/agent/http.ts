@@ -52,14 +52,18 @@ function assertJsonSafe(value: unknown, ancestors = new Set<object>()): void {
 }
 
 export function ndjson(events: readonly unknown[]): Response {
-  const validated = events.map((event) => AgentEventSchema.parse(event));
+  const validated = events.map((event) => {
+    // Inspect original descriptors first: schema parsing may read accessors or omit hidden hooks.
+    assertJsonSafe(event);
+    const parsed = AgentEventSchema.parse(event);
+    assertJsonSafe(parsed);
+    return parsed;
+  });
   const terminals = validated.filter((event) => event.type === "run.completed" || event.type === "run.failed");
   if (terminals.length !== 1 || validated.at(-1) !== terminals[0]) {
     throw new Error("Agent events must end in exactly one terminal event");
   }
   const lines = validated.map((event) => {
-    // summary intentionally accepts arbitrary semantic data; enforce wire safety here.
-    assertJsonSafe(event);
     const line = JSON.stringify(event);
     // Validate the exact wire representation too: serialization can transform unknown values.
     AgentEventSchema.parse(JSON.parse(line));

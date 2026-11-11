@@ -16,6 +16,25 @@ describe("NDJSON boundary", () => {
       summary: { toJSON: () => null },
     }, failed])).toThrow();
   });
+  it("rejects a getter on the summary object before schema parsing can invoke it", () => {
+    let reads = 0;
+    const summary = Object.defineProperty({}, "value", { enumerable: true, get: () => { reads += 1; return 1; } });
+    expect(() => ndjson([{ type: "tool.completed", tool: "validate_plan", durationMs: 0, source: "local", summary }, failed])).toThrow();
+    expect(reads).toBe(0);
+  });
+  it("rejects an event summary accessor without invoking it", () => {
+    let reads = 0;
+    const event = Object.defineProperty({ type: "tool.completed", tool: "validate_plan", durationMs: 0, source: "local" },
+      "summary", { enumerable: true, get: () => { reads += 1; return {}; } });
+    expect(() => ndjson([event, failed])).toThrow();
+    expect(reads).toBe(0);
+  });
+  it("rejects hidden toJSON on the summary object before schema parsing can erase it", () => {
+    let calls = 0;
+    const summary = Object.defineProperty({ valid: true }, "toJSON", { enumerable: false, value: () => { calls += 1; return null; } });
+    expect(() => ndjson([{ type: "tool.completed", tool: "validate_plan", durationMs: 0, source: "local", summary }, failed])).toThrow();
+    expect(calls).toBe(0);
+  });
   it.each([
     { nested: { value: Infinity } },
     { nested: [{ value: -Infinity }] },
