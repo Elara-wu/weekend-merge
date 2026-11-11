@@ -3,7 +3,7 @@ import { z } from "zod";
 const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000;
 const CACHE_TTL_MS = 30 * 60 * 1000;
 
-const WeatherInputSchema = z.object({
+export const WeatherInputSchema = z.object({
   latitude: z.number().finite().min(-90).max(90),
   longitude: z.number().finite().min(-180).max(180),
   start: z.string().datetime({ offset: true }),
