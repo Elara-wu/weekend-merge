@@ -39,6 +39,7 @@ export const PlaceSchema = z.object({
     max: z.number().finite().nonnegative(),
   }).refine(({ min, max }) => min <= max, "Price maximum must be at least minimum"),
   weeklyOpeningHours: WeeklyOpeningHoursSchema,
+  lastAdmissionTime: TimeSchema.optional(),
   sourceUrl: z.string().url(),
   lastVerifiedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
@@ -99,22 +100,22 @@ export const EstimateRouteOutputSchema = z.object({
 export const BudgetItemSchema = z.object({
   category: z.string().min(1),
   label: z.string().min(1),
-  unitPrice: z.number().finite().nonnegative(),
-  quantity: z.number().int().positive(),
+  unitPrice: z.number().finite().min(0).max(100_000),
+  quantity: z.number().int().min(1).max(100),
 });
 
 export const CalculateBudgetInputSchema = z.object({
-  items: z.array(BudgetItemSchema),
-  budgetLimit: z.number().finite().nonnegative(),
+  items: z.array(BudgetItemSchema).max(100),
+  budgetLimit: z.number().finite().min(0).max(1_000_000_000),
   bufferRate: z.number().finite().min(0).max(1),
 });
 
 export const CalculateBudgetOutputSchema = z.object({
-  subtotal: z.number().nonnegative(),
-  buffer: z.number().nonnegative(),
-  total: z.number().nonnegative(),
+  subtotal: z.number().finite().nonnegative(),
+  buffer: z.number().finite().nonnegative(),
+  total: z.number().finite().nonnegative(),
   withinBudget: z.boolean(),
-  breakdown: z.record(z.number().nonnegative()),
+  breakdown: z.record(z.number().finite().nonnegative()),
 });
 
 export type Place = z.infer<typeof PlaceSchema>;

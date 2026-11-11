@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { ZodError } from "zod";
 
 import rawPlaces from "../../../../data/places.shanghai.json";
-import { PlaceListSchema, type Place } from "./contracts";
+import { CalculateBudgetOutputSchema, PlaceListSchema, type Place } from "./contracts";
 import { calculateBudget } from "./budget";
 import { searchPlaces } from "./places";
 import { estimateRoute } from "./route";
@@ -73,6 +74,29 @@ describe("curated places", () => {
 });
 
 describe("searchPlaces", () => {
+  it.each([
+    ["west-bund-museum", "徐汇滨江"],
+    ["shanghai-museum-east", "世纪大道"],
+  ])("respects the real %s last admission cutoff", (placeId, area) => {
+    const afterCutoff = searchPlaces({
+      areas: [area],
+      openBetween: {
+        start: "2026-11-14T17:15:00+08:00",
+        end: "2026-11-14T17:45:00+08:00",
+      },
+    });
+    const beforeCutoff = searchPlaces({
+      areas: [area],
+      openBetween: {
+        start: "2026-11-14T16:30:00+08:00",
+        end: "2026-11-14T17:30:00+08:00",
+      },
+    });
+
+    expect(afterCutoff.places.map((place) => place.placeId)).not.toContain(placeId);
+    expect(beforeCutoff.places.map((place) => place.placeId)).toContain(placeId);
+  });
+
   it("filters by tags, price, indoors, area, and an entire opening interval", () => {
     const result = searchPlaces({
       requiredTags: ["展览"],
@@ -191,5 +215,23 @@ describe("calculateBudget", () => {
       budgetLimit: 100,
       bufferRate: 0.1,
     })).toThrow();
+  });
+
+  it("rejects finite operands that would overflow budget arithmetic", () => {
+    expect(() => calculateBudget({
+      items: [{ category: "food", label: "晚餐", unitPrice: Number.MAX_VALUE, quantity: 2 }],
+      budgetLimit: 100,
+      bufferRate: 0.1,
+    })).toThrow(ZodError);
+  });
+
+  it("rejects non-finite budget output values at the schema boundary", () => {
+    expect(CalculateBudgetOutputSchema.safeParse({
+      subtotal: Infinity,
+      buffer: 0,
+      total: Infinity,
+      withinBudget: false,
+      breakdown: { food: Infinity },
+    }).success).toBe(false);
   });
 });

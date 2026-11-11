@@ -15,6 +15,7 @@
       { "days": ["tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "11:00", "close": "18:00" }] }
     ],
     "sourceUrl": "https://wbmshanghai.com/en/page/visit",
+    "lastAdmissionTime": "17:00",
     "lastVerifiedAt": "2026-11-11"
   },
   {
@@ -33,6 +34,7 @@
       { "days": ["monday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "10:00", "close": "18:00" }] }
     ],
     "sourceUrl": "https://www.shanghaimuseum.cn/mu/frontend/pg/en/service/visit-east",
+    "lastAdmissionTime": "17:00",
     "lastVerifiedAt": "2026-11-11"
   },
   {

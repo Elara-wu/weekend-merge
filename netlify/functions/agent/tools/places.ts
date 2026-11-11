@@ -23,6 +23,10 @@ function minutes(time: string): number {
 function openForInterval(place: Place, start: string, end: string): boolean {
   const localStart = Date.parse(start) + SHANGHAI_OFFSET_MS;
   const localEnd = Date.parse(end) + SHANGHAI_OFFSET_MS;
+  const startMinute = (localStart % DAY_MS + DAY_MS) % DAY_MS / 60_000;
+  if (place.lastAdmissionTime && startMinute > minutes(place.lastAdmissionTime)) {
+    return false;
+  }
   let cursor = localStart;
 
   while (cursor < localEnd) {
