@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AgentEventSchema,
+  PlanSetupSchema,
   PlanRequestSchema,
   ReplanRequestSchema,
 } from "./agent";
@@ -25,6 +26,19 @@ const validSetup = {
   budget: 300,
   startingArea: "徐汇",
 } as const;
+
+describe("PlanSetupSchema", () => {
+  it.each(["2026-11-31", "2026-02-29", "2026-11-1", "next Saturday"])(
+    "rejects an impossible or non-ISO calendar date: %s",
+    (date) => {
+      expect(PlanSetupSchema.safeParse({ ...validSetup, date }).success).toBe(false);
+    },
+  );
+
+  it("accepts a real leap day", () => {
+    expect(PlanSetupSchema.safeParse({ ...validSetup, date: "2028-02-29" }).success).toBe(true);
+  });
+});
 
 const validItinerary = {
   id: "plan-001",

@@ -1,4 +1,4 @@
-import type { Itinerary, PersonPreferences, PlanSetup } from "../../../../src/contracts/agent";
+import { PlanSetupSchema, type Itinerary, type PersonPreferences, type PlanSetup } from "../../../../src/contracts/agent";
 
 import type { Place } from "./contracts";
 
@@ -52,6 +52,17 @@ export function validatePlan(input: ValidatePlanInput): ValidationResult {
   const { plan, setup, preferences, places, lockedStopIds, originalPlan } = input;
   const violations: ValidationResult["violations"] = [];
   const warnings: ValidationResult["warnings"] = [];
+  if (!PlanSetupSchema.shape.date.safeParse(setup.date).success) {
+    return {
+      valid: false,
+      violations: [{
+        code: "OUTSIDE_TIME_RANGE",
+        message: "Plan date is not a real calendar day",
+        affectedStopIds: plan.stops.map((stop) => stop.id),
+      }],
+      warnings,
+    };
+  }
   const placeById = new Map(places.map((place) => [place.placeId, place]));
   const usedPlaces = new Set<string>();
   const avoidedTags = new Set([...preferences.a.avoid, ...preferences.b.avoid]);

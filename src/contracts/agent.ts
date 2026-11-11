@@ -13,7 +13,10 @@ export const AgentStateSchema = z.enum([
 
 export const PlanSetupSchema = z.object({
   city: z.literal("上海"),
-  date: z.string().min(1),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((date) => {
+    const timestamp = Date.parse(`${date}T00:00:00Z`);
+    return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === date;
+  }, "Date must be a real calendar day"),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   endTime: z.string().regex(/^\d{2}:\d{2}$/),
   budget: z.number().min(100).max(2000),

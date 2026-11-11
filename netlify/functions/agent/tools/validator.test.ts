@@ -55,6 +55,14 @@ describe("validatePlan", () => {
     expect(result.violations.map((item) => item.code)).toContain("OUTSIDE_TIME_RANGE");
   });
 
+  it("reports an impossible setup date as a time-range violation even when schema validation is bypassed", () => {
+    const result = check({ setup: { ...setup, date: "2026-11-31" } });
+    expect(result.valid).toBe(false);
+    expect(result.violations).toContainEqual(expect.objectContaining({
+      code: "OUTSIDE_TIME_RANGE", affectedStopIds: ["stop-1"],
+    }));
+  });
+
   it("rejects a closed venue and admission after the cutoff", () => {
     const afterAdmission = check({ plan: { ...plan, stops: [{ ...plan.stops[0], startTime: "17:15", endTime: "17:45" }] } });
     const monday = check({ setup: { ...setup, date: "2026-11-16" } });

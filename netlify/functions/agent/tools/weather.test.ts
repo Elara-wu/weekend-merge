@@ -33,6 +33,19 @@ describe("createWeatherTool", () => {
     expect(fetchStub.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });
 
+  it("passes a signal created with the four-second timeout to fetch", async () => {
+    const signal = new AbortController().signal;
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(signal);
+    const fetchStub = vi.fn().mockResolvedValue(Response.json(response));
+    try {
+      await createWeatherTool({ fetch: fetchStub })(weatherInput);
+      expect(timeout).toHaveBeenCalledWith(4000);
+      expect(fetchStub.mock.calls[0][1].signal).toBe(signal);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
   it("reuses rounded-coordinate forecasts until 30 minutes have elapsed", async () => {
     let now = new Date("2026-11-11T00:00:00Z");
     const fetchStub = vi.fn().mockImplementation(async () => Response.json(response));
@@ -86,6 +99,21 @@ describe("createWeatherTool", () => {
       code: "WEATHER_UNAVAILABLE",
       retryable: true,
     } satisfies Partial<AgentToolError>);
+  });
+
+  it("reports a non-OK upstream response as retryable unavailable weather", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 503 }));
+    await expect(createWeatherTool({ fetch: fetchStub })(weatherInput))
+      .rejects.toMatchObject({ code: "WEATHER_UNAVAILABLE", retryable: true });
+  });
+
+  it("rejects a forecast with no hour in the requested interval", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(Response.json({ hourly: {
+      time: ["2026-11-14T10:00"], temperature_2m: [13],
+      precipitation_probability: [10], weather_code: [0],
+    } }));
+    await expect(createWeatherTool({ fetch: fetchStub })(weatherInput))
+      .rejects.toMatchObject({ code: "WEATHER_UNAVAILABLE", retryable: true });
   });
 
   it("rejects malformed upstream arrays without inventing a forecast", async () => {
