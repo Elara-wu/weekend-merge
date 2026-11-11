@@ -48,6 +48,16 @@ describe("local replan function", () => {
     expect(await response.json()).toMatchObject({ error: { code: "INVALID_REQUEST", field: "replanCount" } });
   });
 
+  it.each([0, 2])("rejects a JSON numeric overflow in a preserved stop at index %s", async (index) => {
+    const input = request();
+    input.plan.stops[index].latitude = 9876;
+    // JSON.stringify(Infinity) is null, so use an actual valid JSON numeric token that overflows when parsed.
+    const body = JSON.stringify(input).replace('"latitude":9876', '"latitude":1e1000');
+    const response = await handler(new Request(url, { method: "POST", body }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: { code: "INVALID_REQUEST", field: `plan.stops.${index}.latitude`, retryable: false } });
+  });
+
   it.each(["listed", "flagged"])("rejects the rejected stop when it is locked (%s)", async (lock) => {
     const input = request();
     if (lock === "listed") input.lockedStopIds.push("stop-1");
@@ -152,6 +162,29 @@ describe("local replan function", () => {
     expect(proposed.plan.stops).toHaveLength(1);
     expect(proposed.plan.totalDistanceKm).toBe(0);
     expect(proposed.plan.transfers).toBe(0);
+  });
+
+  it("rebuilds the summary and score from the resulting curated stop preference matches", async () => {
+    const input = request();
+    input.plan.summary = `只去${input.plan.stops[1].name}`;
+    input.plan.matchScore = 1;
+    input.preferences.a.interests = ["逛店"];
+    input.preferences.b.interests = ["逛店"];
+    const response = await handler(post(input));
+    expect(response.status).toBe(200);
+    const proposed = (await parseEvents(response)).find((event) => event.type === "plan.proposed")!;
+    expect(proposed.plan.summary).not.toContain(input.plan.stops[1].name);
+    expect(proposed.plan.summary).toContain(proposed.plan.stops[1].name);
+    // Only retained book city matches shared 逛店 (书店/阅读/文化): 60 + 12 + 5.
+    expect(proposed.plan.matchScore).toBe(77);
+    expect(proposed.plan.matchScore).toBeLessThanOrEqual(100);
+    expect(Number.isFinite(proposed.plan.matchScore)).toBe(true);
+    const again = (await parseEvents(await handler(post({ ...input, plan: { ...input.plan, matchScore: 99 } })))).find((event) => event.type === "plan.proposed")!;
+    expect(again.plan.matchScore).toBe(proposed.plan.matchScore);
+    input.preferences.a.interests = ["电影"];
+    input.preferences.b.interests = ["电影"];
+    const noMatches = (await parseEvents(await handler(post(input)))).find((event) => event.type === "plan.proposed")!;
+    expect(noMatches.plan.matchScore).toBe(60);
   });
 
   it("assigns a fresh replacement identity even when a preserved stop uses the generated name", async () => {

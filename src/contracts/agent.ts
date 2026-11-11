@@ -14,6 +14,14 @@ export const AgentStateSchema = z.enum([
 const StartTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const EndTimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$|^24:00$/);
 
+// Generous protocol ceilings for a local two-person outing, above the setup budget.
+// Every public number must remain finite through JSON serialization.
+const MAX_STOP_COST = 10_000;
+const MAX_PLAN_COST = 100_000;
+const MAX_PLAN_DISTANCE_KM = 1_000;
+const MAX_TRANSFERS = 50;
+const MAX_TOOL_DURATION_MS = 600_000;
+
 export const PlanSetupSchema = z.object({
   city: z.literal("上海"),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((date) => {
@@ -22,7 +30,7 @@ export const PlanSetupSchema = z.object({
   }, "Date must be a real calendar day"),
   startTime: StartTimeSchema,
   endTime: EndTimeSchema,
-  budget: z.number().min(100).max(2000),
+  budget: z.number().finite().min(100).max(2000),
   startingArea: z.string().min(1),
 });
 
@@ -55,9 +63,9 @@ export const ItineraryStopSchema = z.object({
   area: z.string().min(1),
   startTime: StartTimeSchema,
   endTime: EndTimeSchema,
-  cost: z.number().nonnegative(),
-  latitude: z.number(),
-  longitude: z.number(),
+  cost: z.number().finite().nonnegative().max(MAX_STOP_COST),
+  latitude: z.number().finite().min(-90).max(90),
+  longitude: z.number().finite().min(-180).max(180),
   tags: z.array(z.string()),
   locked: z.boolean().default(false),
 });
@@ -66,11 +74,11 @@ export const ItinerarySchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   summary: z.string().min(1),
-  matchScore: z.number().min(0).max(100),
-  totalCost: z.number().nonnegative(),
-  totalDistanceKm: z.number().nonnegative(),
-  indoorRatio: z.number().min(0).max(100),
-  transfers: z.number().int().nonnegative(),
+  matchScore: z.number().finite().min(0).max(100),
+  totalCost: z.number().finite().nonnegative().max(MAX_PLAN_COST),
+  totalDistanceKm: z.number().finite().nonnegative().max(MAX_PLAN_DISTANCE_KM),
+  indoorRatio: z.number().finite().min(0).max(100),
+  transfers: z.number().finite().int().nonnegative().max(MAX_TRANSFERS),
   stops: z.array(ItineraryStopSchema).min(1),
   reasons: z.array(z.string()).min(1),
 });
@@ -96,7 +104,7 @@ export const ReplanRequestSchema = z.object({
   lockedStopIds: z.array(z.string()).max(10),
   rejectedStopId: z.string().min(1),
   reason: z.string().min(1).max(160),
-  replanCount: z.number().int().min(0).max(1),
+  replanCount: z.number().finite().int().min(0).max(1),
   setup: PlanSetupSchema,
   preferences: z.object({ a: PersonPreferencesSchema, b: PersonPreferencesSchema }),
 });
@@ -137,7 +145,7 @@ const ToolCompletedEventSchema = z.object({
   type: z.literal("tool.completed"),
   tool: ToolNameSchema,
   summary: z.record(z.unknown()),
-  durationMs: z.number().int().nonnegative(),
+  durationMs: z.number().finite().int().nonnegative().max(MAX_TOOL_DURATION_MS),
   source: z.string().min(1),
 });
 

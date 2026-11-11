@@ -98,7 +98,36 @@ const validItinerary = {
   reasons: ["满足看展和咖啡偏好"],
 } as const;
 
+describe("public itinerary numeric boundaries", () => {
+  it.each(["cost", "latitude", "longitude"].flatMap((field) =>
+    [Infinity, -Infinity, Number.NaN, JSON.parse("1e1000")].map((value) => [field, value] as const),
+  ))("rejects nonfinite stop %s (%s)", (field, value) => {
+    expect(ItinerarySchema.safeParse({ ...validItinerary, stops: [{ ...validItinerary.stops[0], [field]: value }] }).success).toBe(false);
+  });
+
+  it.each(["matchScore", "totalCost", "totalDistanceKm", "indoorRatio", "transfers"].flatMap((field) =>
+    [Infinity, -Infinity, Number.NaN, JSON.parse("1e1000")].map((value) => [field, value] as const),
+  ))("rejects nonfinite plan %s (%s)", (field, value) => {
+    expect(ItinerarySchema.safeParse({ ...validItinerary, [field]: value }).success).toBe(false);
+  });
+
+  it.each([
+    ["cost", 10001], ["latitude", 90.01], ["latitude", -90.01], ["longitude", 180.01], ["longitude", -180.01],
+  ])("rejects stop %s outside realistic bounds (%s)", (field, value) => {
+    expect(ItinerarySchema.safeParse({ ...validItinerary, stops: [{ ...validItinerary.stops[0], [field]: value }] }).success).toBe(false);
+  });
+
+  it.each([["totalCost", 100001], ["totalDistanceKm", 1001], ["transfers", 51]])(
+    "rejects plan %s outside realistic bounds (%s)", (field, value) => {
+      expect(ItinerarySchema.safeParse({ ...validItinerary, [field]: value }).success).toBe(false);
+    },
+  );
+});
+
 describe("AgentEventSchema", () => {
+  it.each([Infinity, -Infinity, Number.NaN, 600001])("rejects a nonfinite or excessive tool duration (%s)", (durationMs) => {
+    expect(AgentEventSchema.safeParse({ type: "tool.completed", tool: "validate_plan", durationMs, source: "local", summary: {} }).success).toBe(false);
+  });
   it("rejects a completed tool event without a source", () => {
     const result = AgentEventSchema.safeParse({
       type: "tool.completed",

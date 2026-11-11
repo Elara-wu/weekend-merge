@@ -25,7 +25,7 @@ const places: Place[] = [10, 20, 30, 40].map((price, index) => ({
 }));
 const plans: Itinerary[] = [[0, 1], [0, 2], [1, 2]].map((pair, index) => ({
   id: `model-${index}`, title: `模型方案${index}`, summary: "模型组合", matchScore: 90,
-  totalCost: 1, totalDistanceKm: 999, indoorRatio: 0, transfers: 99, reasons: ["共同兴趣"],
+  totalCost: 1, totalDistanceKm: 999, indoorRatio: 0, transfers: 49, reasons: ["共同兴趣"],
   stops: pair.map((placeIndex, stopIndex) => ({
     id: `stop-${index}-${stopIndex}`, placeId: places[placeIndex].placeId, name: "untrusted name", area: "untrusted area",
     latitude: 0, longitude: 0, tags: [], cost: 0, startTime: stopIndex ? "13:00" : "11:00",

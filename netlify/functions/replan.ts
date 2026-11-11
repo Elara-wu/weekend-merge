@@ -101,8 +101,12 @@ function replan(request: ReplanRequest, rejectedIndex: number, lockedIds: Set<st
     const items: CalculateBudgetInput["items"] = venues.map((place) => ({ category: place.category, label: place.name, unitPrice: place.priceRange.max, quantity: 2 }));
     for (const leg of route.legs) if (leg.mode === "transit") items.push({ category: "transport", label: "交通预算", unitPrice: 4, quantity: 2 });
     const budget = calculateBudget({ items, budgetLimit: request.setup.budget, bufferRate: 0.1 });
+    const sharedHits = venues.reduce((sum, place) => sum + shared.filter((interest) => interestMatchesTags(interest, place.tags)).length, 0);
+    const interestHits = venues.reduce((sum, place) => sum + interests.filter((interest) => interestMatchesTags(interest, place.tags)).length, 0);
     const plan = ItinerarySchema.parse({ ...request.plan,
       id: `${request.plan.id}-replan-${request.replanCount + 1}`, stops: scheduled,
+      summary: scheduled.map((stop) => stop.name).join("、"),
+      matchScore: Math.max(0, Math.min(100, 60 + sharedHits * 12 + interestHits * 5)),
       totalCost: budget.total, totalDistanceKm: route.totalDistanceKm,
       indoorRatio: venues.filter((place) => place.indoor).length / venues.length * 100,
       transfers: route.legs.filter((leg) => leg.mode === "transit").length,
