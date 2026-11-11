@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && tsc --noEmit -p tsconfig.functions.json && vite build",
     "preview": "vite preview",
     "test": "vitest --passWithNoTests",
     "test:watch": "vitest"
