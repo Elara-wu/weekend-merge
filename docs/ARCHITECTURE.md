@@ -17,7 +17,7 @@ flowchart LR
   Local --> Events
 ```
 
-浏览器当前直接读取 `createDemoRun()`，未调用图中的 HTTP 端点。两个端点的请求由 `src/contracts/agent.ts` 中的 Zod Schema 校验。成功响应为 `application/x-ndjson`，每行一个事件，最后恰好一个 `run.completed` 或 `run.failed`；不合法请求返回 JSON 错误对象。
+浏览器当前直接读取 `createDemoRun()`，未调用图中的 HTTP 端点。两个端点先用 `src/contracts/agent.ts` 中的 Zod Schema 校验 HTTP 请求：无效 JSON 或请求字段会在进入状态机前收到 HTTP 400 JSON 错误，不产生事件。已进入状态机后的运行失败才以 `run.failed` 事件结束。成功响应为 `application/x-ndjson`，每行一个事件，最后恰好一个 `run.completed` 或 `run.failed`。
 
 ## 初始规划
 
@@ -25,7 +25,7 @@ flowchart LR
 stateDiagram-v2
   [*] --> VALIDATE
   VALIDATE --> ANALYZE: 请求与目录有效
-  VALIDATE --> Failed: 无效
+  VALIDATE --> Failed: 运行时目录无效
   ANALYZE --> GATHER: 本地共识分析
   GATHER --> PROPOSE: 模型结果或规则降级
   PROPOSE --> VERIFY: 三个不同候选
@@ -41,7 +41,7 @@ stateDiagram-v2
 
 ## 局部重排
 
-`POST /.netlify/functions/replan` 不调用 Gemini 或网络。请求包含完整原方案、两人的偏好、设定、`rejectedStopId`、`lockedStopIds`、原因和 `replanCount`（只允许 0 或 1，因此最多两轮）。服务端从静态目录选择未出现在原方案中的替代地点，只调整被否决站点及必要时相邻、未锁定站点的时间；其余站点保持原样。锁定站点不能被否决，否则返回 `409 LOCKED_STOP_CONFLICT`。找不到满足时间、路线、预算和其他硬约束的替代方案时返回 `422 NO_VALID_REPLAN`。
+`POST /.netlify/functions/replan` 不调用 Gemini 或网络。请求包含完整原方案、两人的偏好、设定、`rejectedStopId`、`lockedStopIds`、原因和 `replanCount`。请求 Schema 只接受 `replanCount` 为 0 或 1，供可信客户端按会话约定执行最多两轮。Function 本身无状态，无法识别重复提交的 0 或 1；若要在服务端持久执行轮次限制，需要会话状态或速率存储，这超出当前无数据库 MVP 的范围。服务端从静态目录选择未出现在原方案中的替代地点，只调整被否决站点及必要时相邻、未锁定站点的时间；其余站点保持原样。锁定站点不能被否决，否则返回 `409 LOCKED_STOP_CONFLICT`。找不到满足时间、路线、预算和其他硬约束的替代方案时返回 `422 NO_VALID_REPLAN`。
 
 成功重排依次发出 `REPLAN`、本地路线/预算/验证工具摘要、`VERIFY`、一个 `plan.proposed`，然后以只含一个元素的 `candidateIds` 和必需的 `diff` 结束。`diff` 列出替换站点 ID 与保留站点 ID。
 

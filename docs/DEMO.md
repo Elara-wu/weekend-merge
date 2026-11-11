@@ -1,10 +1,10 @@
 # 本地 Agent 演示
 
-在项目根目录操作。需要 Node.js 22+、已安装的 Netlify CLI，以及下面冲突示例使用的 `jq`。先运行 `npm install`，然后在单独终端运行 `netlify dev`；以下命令使用其默认地址 `http://localhost:8888`。这些命令会调用本地 Function；仅在配置 Gemini 后，实时规划才会请求模型。演示日期和地点是固定样例，实际出行前需重新核对。
+在项目根目录操作。需要 Node.js 22+ 和已安装的 Netlify CLI；只有把固定请求转换为实时请求或运行锁定冲突示例时才需要 `jq`。先运行 `npm install`，然后在单独终端运行 `netlify dev`；以下命令使用其默认地址 `http://localhost:8888`。这些命令会调用本地 Function；仅在配置 Gemini 后，实时规划才会请求模型。演示日期和地点是固定样例，实际出行前需重新核对。
 
 ## 固定规划事件
 
-仓库中的 `tests/fixtures/plan-request.demo.json` 是完整请求，`mode` 为 `demo`。响应为逐行 JSON 事件，最后一行为 `run.completed`，包含三个 `candidateIds`，不含 `diff`。
+仓库中的 `tests/fixtures/plan-request.demo.json` 就是此演示的固定、完整 JSON 请求体，`mode` 为 `demo`；下面的 `curl` 直接以 `--data-binary @tests/fixtures/plan-request.demo.json` 提交，无需 `jq`。响应为逐行 JSON 事件，最后一行为 `run.completed`，包含三个 `candidateIds`，不含 `diff`。
 
 ```bash
 curl -sS -N -X POST 'http://localhost:8888/.netlify/functions/plan' \
@@ -92,7 +92,7 @@ curl -sS -N -X POST 'http://localhost:8888/.netlify/functions/replan' \
   -H 'Content-Type: application/json' --data-binary @/tmp/weekend-replan.json
 ```
 
-响应只有一个 `plan.proposed`。最后的 `run.completed.result` 有一个 `candidateIds` 元素和 `diff`；被锁定的 `stop-0`、`stop-3` 保持原样。`replanCount` 允许 0 或 1，即最多两轮。重排完全本地运行，不依赖 Gemini 或天气服务。
+响应只有一个 `plan.proposed`。最后的 `run.completed.result` 有一个 `candidateIds` 元素和 `diff`；被锁定的 `stop-0`、`stop-3` 保持原样。可信客户端应将 `replanCount` 从 0 递增到 1 后停止；Function 仅验证传入值为 0 或 1，不保存会话历史，因此不能阻止重复传入同一计数。重排完全本地运行，不依赖 Gemini 或天气服务。
 
 ## 锁定站点冲突
 

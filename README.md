@@ -6,7 +6,7 @@
 
 - 前端提供双人偏好向导、隐私交接、三个演示候选方案和规划工作台，刷新后恢复当前步骤。浏览器工作台目前使用 `createDemoRun()` 展示 fixture，尚未连接 HTTP Agent。
 - `POST /.netlify/functions/plan` 接受完整请求。`mode: "demo"` 返回固定展示事件；`mode: "live"` 运行受控 Agent。未配置 Gemini 时，实时请求会发出 `run.degraded` 并使用确定性规则方案。
-- `POST /.netlify/functions/replan` 在本地替换一个被否决的目录地点，最多重排两轮，保留锁定站点，返回一个候选方案和差异。
+- `POST /.netlify/functions/replan` 在本地替换一个被否决的目录地点，保留锁定站点，返回一个候选方案和差异。可信客户端按 `replanCount` 约定最多执行两轮；无数据库的服务端不记录会话轮次。
 - 两个端点成功时均返回经过共享 Schema 校验的 NDJSON 事件；请求错误返回结构化 JSON。
 
 ## 快速开始
