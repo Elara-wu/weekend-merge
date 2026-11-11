@@ -48,6 +48,16 @@ function clock(total: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
+function nextQuarterHour(minute: number): number {
+  return Math.ceil(minute / 15) * 15;
+}
+
+function earliestAlignedFinish(pair: Pair, start: number): number {
+  const firstEnd = start + durations[pair.places[0].category];
+  const secondStart = nextQuarterHour(firstEnd + pair.route.legs[0].durationMinutes);
+  return secondStart + durations[pair.places[1].category];
+}
+
 function openAt(place: Place, date: string, start: number, end: number): boolean {
   if (end > 1440) return false;
   const endDate = end === 1440
@@ -73,7 +83,7 @@ function schedule(pair: Pair, request: PlanRequest, avoided: readonly string[]):
     if (!openAt(first, request.setup.date, firstStart, firstEnd) ||
       violatesAvoidedStop(avoided, first.tags, first.indoor, clock(firstStart))) continue;
     const earliestSecond = firstEnd + pair.route.legs[0].durationMinutes;
-    for (let secondStart = Math.ceil(earliestSecond / 15) * 15; secondStart + durations[second.category] <= rangeEnd; secondStart += 15) {
+    for (let secondStart = nextQuarterHour(earliestSecond); secondStart + durations[second.category] <= rangeEnd; secondStart += 15) {
       const secondEnd = secondStart + durations[second.category];
       if (openAt(second, request.setup.date, secondStart, secondEnd) &&
         !violatesAvoidedStop(avoided, second.tags, second.indoor, clock(secondStart))) {
@@ -169,8 +179,7 @@ export function createRulePlans(context: RulePlanContext): Itinerary[] {
       }
       const times = schedule(pair, request, avoided);
       if (!times) {
-        const minimumMinutes = durations[pair.places[0].category] + pair.route.legs[0].durationMinutes + durations[pair.places[1].category];
-        if (minutes(request.setup.endTime) - minutes(request.setup.startTime) < minimumMinutes) {
+        if (earliestAlignedFinish(pair, minutes(request.setup.startTime)) > minutes(request.setup.endTime)) {
           violations.add("OUTSIDE_TIME_RANGE");
         } else if (schedule(pair, request, [])) {
           violations.add("AVOID_TAG_MATCHED");

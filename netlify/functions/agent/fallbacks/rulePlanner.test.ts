@@ -195,6 +195,27 @@ describe("deterministic fallback", () => {
     }
   });
 
+  it("reports time exhaustion when quarter-hour alignment pushes the second stop past setup end", () => {
+    const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+    const alwaysOpen = shanghaiPlaces.slice(3, 6).map((place, index) => ({
+      ...place,
+      latitude: 31.2 + index * 0.00001,
+      longitude: 121.4,
+      weeklyOpeningHours: [{ days: [...days], intervals: [{ open: "00:00", close: "24:00" }] }],
+    }));
+    expect(estimateRoute({ stops: alwaysOpen.slice(0, 2), mode: "mixed" }).legs[0].durationMinutes).toBe(1);
+    const alignedRequest = { ...request, setup: { ...request.setup, startTime: "11:00", endTime: "12:32" } };
+    expect(() => createRulePlans({ request: alignedRequest, places: alwaysOpen })).toThrowError(NoValidPlanError);
+    try {
+      createRulePlans({ request: alignedRequest, places: alwaysOpen });
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: "NO_VALID_PLAN",
+        violatedConstraintCodes: ["OUTSIDE_TIME_RANGE"],
+      });
+    }
+  });
+
   it("throws a typed error when avoidance excludes every venue", () => {
     const impossible = {
       ...request,
