@@ -69,6 +69,45 @@ export const ItinerarySchema = z.object({
   reasons: z.array(z.string()).min(1),
 });
 
+export const ToolNameSchema = z.enum([
+  "get_weather",
+  "search_places",
+  "estimate_route",
+  "calculate_budget",
+  "validate_plan",
+]);
+
+export const PlanRequestSchema = z.object({
+  sessionId: z.string().min(1).max(80),
+  mode: z.enum(["live", "demo"]).default("live"),
+  setup: PlanSetupSchema,
+  preferences: z.object({ a: PersonPreferencesSchema, b: PersonPreferencesSchema }),
+});
+
+export const ReplanRequestSchema = z.object({
+  sessionId: z.string().min(1).max(80),
+  plan: ItinerarySchema,
+  lockedStopIds: z.array(z.string()).max(10),
+  rejectedStopId: z.string().min(1),
+  reason: z.string().min(1).max(160),
+  replanCount: z.number().int().min(0).max(1),
+  setup: PlanSetupSchema,
+  preferences: z.object({ a: PersonPreferencesSchema, b: PersonPreferencesSchema }),
+});
+
+export const PlanDiffSchema = z.object({
+  replacedStopIds: z.array(z.string()),
+  preservedStopIds: z.array(z.string()),
+  summary: z.string().min(1),
+});
+
+export const PlanResultSchema = z.object({
+  runId: z.string().min(1),
+  consensus: ConsensusSummarySchema,
+  candidateIds: z.array(z.string()).length(3),
+  diff: PlanDiffSchema.optional(),
+});
+
 const RunStartedEventSchema = z.object({
   type: z.literal("run.started"),
   runId: z.string().min(1),
@@ -83,13 +122,7 @@ const StepStartedEventSchema = z.object({
 
 const ToolCompletedEventSchema = z.object({
   type: z.literal("tool.completed"),
-  tool: z.enum([
-    "get_weather",
-    "search_places",
-    "estimate_route",
-    "calculate_budget",
-    "validate_plan",
-  ]),
+  tool: ToolNameSchema,
   summary: z.record(z.unknown()),
   durationMs: z.number().int().nonnegative(),
   source: z.string().min(1),
@@ -115,11 +148,7 @@ const RunDegradedEventSchema = z.object({
 
 const RunCompletedEventSchema = z.object({
   type: z.literal("run.completed"),
-  result: z.object({
-    runId: z.string().min(1),
-    consensus: ConsensusSummarySchema,
-    candidateIds: z.array(z.string()).length(3),
-  }),
+  result: PlanResultSchema,
 });
 
 const RunFailedEventSchema = z.object({
@@ -142,6 +171,11 @@ export const AgentEventSchema = z.discriminatedUnion("type", [
 export type AgentState = z.infer<typeof AgentStateSchema>;
 export type PlanSetup = z.infer<typeof PlanSetupSchema>;
 export type PersonPreferences = z.infer<typeof PersonPreferencesSchema>;
+export type PlanRequest = z.infer<typeof PlanRequestSchema>;
+export type ReplanRequest = z.infer<typeof ReplanRequestSchema>;
 export type ConsensusSummary = z.infer<typeof ConsensusSummarySchema>;
 export type Itinerary = z.infer<typeof ItinerarySchema>;
+export type PlanDiff = z.infer<typeof PlanDiffSchema>;
+export type PlanResult = z.infer<typeof PlanResultSchema>;
+export type ToolName = z.infer<typeof ToolNameSchema>;
 export type AgentEvent = z.infer<typeof AgentEventSchema>;
