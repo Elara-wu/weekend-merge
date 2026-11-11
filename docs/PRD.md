@@ -521,6 +521,20 @@ weekend-merge/
 
 本文件保存在独立项目仓库的 `docs/PRD.md`，README 和 Issues 应链接到本文件，而不是复制需求内容。
 
+### 10.3 部署与个人简历集成
+
+Weekend Merge 使用独立仓库和独立 Netlify 站点，不并入个人简历站点的构建产物。这样前端协作者可以独立开发和发布，Agent Functions、环境变量与简历站点也保持清晰边界。
+
+- 应用仓库：`https://github.com/wml516518/weekend-merge`。
+- 应用部署：Netlify Production Site，构建命令为 `npm run build`，发布目录为 `dist`，Functions 目录为 `netlify/functions`。
+- 服务端密钥：`GEMINI_API_KEY` 和 `GEMINI_MODEL` 仅配置在 Weekend Merge 的 Netlify 环境变量中。
+- 无密钥或模型不可用时：线上站点仍可进入明确标记的演示/规则模式，不得把规则结果伪装为 Gemini 结果。
+- 简历集成：在个人主页的中英文“项目”列表和中英文“项目经验”中都增加 Weekend Merge。
+- 项目入口：个人主页同时提供独立 Netlify Demo 链接和 GitHub 仓库链接，均在新标签页打开。
+- 发布顺序：先发布并验证 Weekend Merge，再把确认可访问的生产 URL 写入个人简历站点，最后重新发布简历站点。
+
+首版使用 Netlify 自动分配的站点域名。自定义域名或子域名不属于本轮范围，后续迁移不得改变应用仓库和简历内容的数据结构。
+
 ## 11. 异常处理与降级
 
 ### 11.1 模型异常
@@ -632,6 +646,16 @@ MVP 不使用公共 Nominatim 做自动补全或系统性 POI 搜索。
 
 验收要求：演示模式无需外部 API 即可稳定通过该流程。
 
+### 14.5 部署与简历集成验收
+
+- Weekend Merge 的生产 URL 可以直接访问，刷新任意前端路由不会返回 404。
+- `/.netlify/functions/plan` 和 `/.netlify/functions/replan` 仅接受约定方法，并返回符合共享 Schema 的事件或结构化错误。
+- 浏览器构建产物和网络响应不包含 `GEMINI_API_KEY`。
+- 未配置 Gemini 时，生产站点仍可完成固定演示流程，并明确显示降级状态。
+- 个人主页中英文“项目”列表均展示 Weekend Merge 的 Live 与 GitHub 入口。
+- 个人主页中英文“项目经验”均包含 Agent 状态机、工具调用、局部重排和降级能力的简历级说明。
+- 两个站点分别通过桌面与移动端检查，链接无误且不存在文字溢出或控件遮挡。
+
 ## 15. 两人分工
 
 ### 15.1 Agent / 全栈负责人
@@ -683,7 +707,9 @@ MVP 不使用公共 Nominatim 做自动补全或系统性 POI 搜索。
 
 - 补齐测试、无障碍标签和响应式细节。
 - 完成 README、架构图、演示 GIF 和 `docs/DEMO.md`。
-- 发布生产版本并在个人主页添加入口。
+- 发布 Weekend Merge 独立 Netlify 生产版本。
+- 在个人主页中英文“项目”列表和“项目经验”中添加 Demo 与 GitHub 入口。
+- 重新发布个人简历站点并验证两个站点之间的链接。
 
 ## 17. GitHub 展示要求
 
@@ -717,3 +743,5 @@ README 的项目亮点应强调：
 - 桌面与移动端不存在文字溢出、控件重叠或不可操作区域。
 - 地图、天气和地点数据展示正确署名与免责声明。
 - README、PRD、架构说明和演示脚本已进入公开仓库。
+- Weekend Merge 已独立部署到 Netlify，生产 URL 已写入个人主页。
+- 个人主页中英文“项目”列表与“项目经验”均可访问在线 Demo 和 GitHub 仓库。
