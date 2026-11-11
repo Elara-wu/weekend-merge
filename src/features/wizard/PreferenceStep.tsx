@@ -1,153 +1,340 @@
 import { useState, type FormEvent } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BookOpen,
+  Coffee,
+  Footprints,
+  Leaf,
+  Sun,
+  Film,
+  Users,
+  Sparkles,
+  ShoppingBag,
+  Heart,
+  EyeOff,
+  CalendarDays,
+  MoveUp,
+  MoveDown,
+} from "lucide-react";
+import {
+  PersonPreferencesSchema,
+  type PersonPreferences,
+  type PlanSetup,
+} from "@/contracts/agent";
+import { dateLabel, Modal, Tag } from "@/components/Ui";
 
-import type { PersonPreferences } from "@/contracts/agent";
-
-const interests = ["展览", "咖啡", "城市散步", "自然", "电影", "桌游", "夜景", "逛店", "美食"];
-const avoidOptions = ["排队", "拥挤", "长距离步行", "早起", "辛辣", "酒吧", "户外日晒"];
-
-type PreferenceStepProps = {
+const interests = [
+  "展览",
+  "咖啡",
+  "城市散步",
+  "自然",
+  "公园",
+  "电影",
+  "桌游",
+  "夜景",
+  "逛店",
+  "美食",
+];
+const icons = [
+  BookOpen,
+  Coffee,
+  Footprints,
+  Leaf,
+  Sun,
+  Film,
+  Users,
+  Sparkles,
+  ShoppingBag,
+  Heart,
+];
+export function PreferenceStep({
+  person,
+  onSubmit,
+  onBack,
+  initial,
+  setup,
+}: {
   person: "A" | "B";
-  onSubmit: (preferences: PersonPreferences) => void;
-};
-
-function toggleValue(current: string[], value: string, limit?: number) {
-  if (current.includes(value)) {
-    return current.filter((item) => item !== value);
+  onSubmit: (p: PersonPreferences) => void;
+  onBack?: () => void;
+  initial?: PersonPreferences;
+  setup?: PlanSetup;
+}) {
+  const [draft, setDraft] = useState<PersonPreferences>(
+    initial ?? {
+      interests: [],
+      pace: "轻松",
+      walkingLimitKm: 3,
+      indoorPreference: "室内优先",
+      foodTags: [],
+      budgetStyle: "平衡",
+      avoid: [],
+      wish: "",
+    },
+  );
+  const [backConfirm, setBackConfirm] = useState(false);
+  const toggle = (key: "interests" | "foodTags" | "avoid", value: string) =>
+    setDraft((old) => ({
+      ...old,
+      [key]: old[key].includes(value)
+        ? old[key].filter((x) => x !== value)
+        : key === "interests" && old.interests.length >= 5
+          ? old[key]
+          : [...old[key], value],
+    }));
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    const parsed = PersonPreferencesSchema.safeParse(draft);
+    if (parsed.success) onSubmit(parsed.data);
   }
-  if (limit && current.length >= limit) {
-    return current;
+  function move(i: number, delta: number) {
+    const items = [...draft.interests];
+    [items[i], items[i + delta]] = [items[i + delta], items[i]];
+    setDraft({ ...draft, interests: items });
   }
-  return [...current, value];
-}
-
-export function PreferenceStep({ person, onSubmit }: PreferenceStepProps) {
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
-  const [avoid, setAvoid] = useState<string[]>([]);
-  const [pace, setPace] = useState<PersonPreferences["pace"]>("轻松");
-  const [walkingLimitKm, setWalkingLimitKm] = useState<PersonPreferences["walkingLimitKm"]>(3);
-  const [indoorPreference, setIndoorPreference] =
-    useState<PersonPreferences["indoorPreference"]>("室内优先");
-  const [budgetStyle, setBudgetStyle] = useState<PersonPreferences["budgetStyle"]>("平衡");
-  const [wish, setWish] = useState("");
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (selectedInterests.length === 0) return;
-    onSubmit({
-      interests: selectedInterests,
-      pace,
-      walkingLimitKm,
-      indoorPreference,
-      foodTags: ["不限"],
-      budgetStyle,
-      avoid,
-      wish,
-    });
-  }
-
   return (
-    <section className="wizard-panel" aria-labelledby="preference-title">
-      <div className="step-kicker">偏好 02 / 03 · {person}</div>
-      <h1 id="preference-title">{person} 的周末偏好</h1>
-      <p className="step-intro">选择会先保密。最多挑五项真正想做的事。</p>
-
-      <form className="preference-form" onSubmit={handleSubmit}>
-        <fieldset className="choice-group">
-          <legend>最想做什么</legend>
-          <div className="choice-grid">
-            {interests.map((interest) => (
-              <label className="choice-chip" key={interest}>
-                <input
-                  type="checkbox"
-                  checked={selectedInterests.includes(interest)}
-                  onChange={() => setSelectedInterests(toggleValue(selectedInterests, interest, 5))}
-                />
-                <span>{interest}</span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        <div className="compact-fields">
-          <label className="field">
-            <span>活动节奏</span>
-            <select value={pace} onChange={(event) => setPace(event.target.value as PersonPreferences["pace"])}>
-              <option>轻松</option>
-              <option>平衡</option>
-              <option>充实</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>步行上限</span>
-            <select
-              value={walkingLimitKm}
-              onChange={(event) =>
-                setWalkingLimitKm(Number(event.target.value) as PersonPreferences["walkingLimitKm"])
-              }
-            >
-              <option value="1">1 公里</option>
-              <option value="3">3 公里</option>
-              <option value="5">5 公里</option>
-              <option value="8">8 公里</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>室内外</span>
-            <select
-              value={indoorPreference}
-              onChange={(event) =>
-                setIndoorPreference(event.target.value as PersonPreferences["indoorPreference"])
-              }
-            >
-              <option>室内优先</option>
-              <option>均可</option>
-              <option>户外优先</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>预算倾向</span>
-            <select
-              value={budgetStyle}
-              onChange={(event) => setBudgetStyle(event.target.value as PersonPreferences["budgetStyle"])}
-            >
-              <option>省钱</option>
-              <option>平衡</option>
-              <option>体验优先</option>
-            </select>
-          </label>
+    <main className="wizard-page">
+      <aside className="wizard-intro">
+        <Tag>
+          <EyeOff size={13} />
+          独立填写 · 提交后隐藏
+        </Tag>
+        <h1 aria-label={`${person} 的周末偏好`}>
+          你好，{person}。<br />
+          这个周末，你想怎么过？
+        </h1>
+        <p>
+          先听见自己的期待，再找到两个人的交集。
+          <br />
+          你的答案暂时只属于你。
+        </p>
+        <div className={`person-art person-${person.toLowerCase()}`}>
+          <span>{person}</span>
+          <Leaf size={80} />
         </div>
-
-        <fieldset className="choice-group">
-          <legend>绝对不要</legend>
-          <div className="choice-grid">
-            {avoidOptions.map((item) => (
-              <label className="choice-chip conflict" key={item}>
+        {setup && (
+          <div className="context-note">
+            <CalendarDays size={16} />
+            {dateLabel(setup.date)}
+            <br />
+            <span>
+              {setup.startTime} — {setup.endTime} · 两人 ¥{setup.budget}
+            </span>
+          </div>
+        )}
+      </aside>
+      <form className="preferences-card" onSubmit={submit}>
+        <fieldset className="plain-fieldset">
+          <legend className="section-label">
+            01 / 想做些什么 <small>选 1–5 项，按心动程度排序</small>
+          </legend>
+          <div className="interest-grid">
+            {interests.map((name, i) => {
+              const Icon = icons[i];
+              return (
+                <label
+                  key={name}
+                  className={`interest ${draft.interests.includes(name) ? "selected" : ""}`}
+                >
+                  <input
+                    className="sr-only"
+                    type="checkbox"
+                    checked={draft.interests.includes(name)}
+                    onChange={() => toggle("interests", name)}
+                    aria-label={name}
+                  />
+                  <span className="interest-icon">
+                    <Icon />
+                  </span>
+                  {name}
+                  {draft.interests.includes(name) && (
+                    <b>{draft.interests.indexOf(name) + 1}</b>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+        {draft.interests.length > 1 && (
+          <div className="rank-list">
+            {draft.interests.map((name, i) => (
+              <div key={name}>
+                <span>
+                  {i + 1}. {name}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`上移${name}`}
+                  disabled={i === 0}
+                  onClick={() => move(i, -1)}
+                >
+                  <MoveUp size={12} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`下移${name}`}
+                  disabled={i === draft.interests.length - 1}
+                  onClick={() => move(i, 1)}
+                >
+                  <MoveDown size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="pref-columns">
+          {(
+            [
+              {
+                key: "pace",
+                title: "活动节奏",
+                options: ["轻松", "平衡", "充实"],
+              },
+              {
+                key: "indoorPreference",
+                title: "室内外",
+                options: ["室内优先", "均可", "户外优先"],
+              },
+              {
+                key: "budgetStyle",
+                title: "预算倾向",
+                options: ["省钱", "平衡", "体验优先"],
+              },
+            ] as const
+          ).map((group) => (
+            <fieldset className="field plain-fieldset" key={group.key}>
+              <legend>{group.title}</legend>
+              <div className="segmented">
+                {group.options.map((value) => (
+                  <button
+                    type="button"
+                    key={value}
+                    aria-pressed={draft[group.key] === value}
+                    className={draft[group.key] === value ? "selected" : ""}
+                    onClick={() => setDraft({ ...draft, [group.key]: value })}
+                  >
+                    {value}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          ))}
+          <fieldset className="field plain-fieldset">
+            <legend>步行上限</legend>
+            <div className="segmented">
+              {([1, 3, 5, 8] as const).map((value) => (
+                <button
+                  type="button"
+                  key={value}
+                  aria-pressed={draft.walkingLimitKm === value}
+                  className={draft.walkingLimitKm === value ? "selected" : ""}
+                  onClick={() => setDraft({ ...draft, walkingLimitKm: value })}
+                >
+                  {value} 公里
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+        <fieldset className="field plain-fieldset">
+          <legend>
+            饮食偏好 <small>可多选</small>
+          </legend>
+          <div className="chips">
+            {["清淡", "素食", "不吃海鲜", "本帮菜", "不限"].map((value) => (
+              <label
+                className={`check-chip ${draft.foodTags.includes(value) ? "selected" : ""}`}
+                key={value}
+              >
                 <input
+                  className="sr-only"
                   type="checkbox"
-                  checked={avoid.includes(item)}
-                  onChange={() => setAvoid(toggleValue(avoid, item))}
+                  checked={draft.foodTags.includes(value)}
+                  onChange={() => toggle("foodTags", value)}
                 />
-                <span>{item}</span>
+                {value}
               </label>
             ))}
           </div>
         </fieldset>
-
-        <label className="field">
-          <span>一句话愿望（可选）</span>
+        <fieldset className="field plain-fieldset">
+          <legend>这些，请帮我避开</legend>
+          <div className="chips">
+            {[
+              "排队",
+              "拥挤",
+              "长距离步行",
+              "早起",
+              "辛辣",
+              "酒吧",
+              "户外日晒",
+            ].map((value) => (
+              <label
+                className={`check-chip ${draft.avoid.includes(value) ? "selected avoid" : ""}`}
+                key={value}
+              >
+                <input
+                  className="sr-only"
+                  type="checkbox"
+                  checked={draft.avoid.includes(value)}
+                  onChange={() => toggle("avoid", value)}
+                />
+                {value}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div className="field">
+          <label htmlFor={`wish-${person}`}>一句话愿望（可选）</label>
           <textarea
+            id={`wish-${person}`}
             maxLength={80}
-            rows={3}
-            value={wish}
-            onChange={(event) => setWish(event.target.value)}
-            placeholder="例如：想找一个可以慢慢聊天的地方"
+            value={draft.wish}
+            placeholder="比如：想找一个能安静聊天的地方……"
+            onChange={(e) => setDraft({ ...draft, wish: e.target.value })}
           />
-        </label>
-
-        <button className="primary-action" type="submit" disabled={selectedInterests.length === 0}>
-          {person === "A" ? "隐藏答案" : "保存并揭晓共识"}
-        </button>
+          <small className="wish-counter">{draft.wish.length}/80</small>
+        </div>
+        <div className="wizard-actions">
+          {onBack ? (
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => (person === "B" ? setBackConfirm(true) : onBack())}
+            >
+              <ArrowLeft size={15} />
+              上一步
+            </button>
+          ) : (
+            <span />
+          )}
+          <button
+            className="button primary"
+            type="submit"
+            disabled={!draft.interests.length}
+            aria-label={person === "A" ? "隐藏答案" : "保存并揭晓共识"}
+          >
+            {person === "A" ? "保存，交给另一位" : "保存，看看我们的交集"}
+            <ArrowRight size={16} />
+          </button>
+        </div>
       </form>
-    </section>
+      {backConfirm && (
+        <Modal title="请确认设备已交还 A" onClose={() => setBackConfirm(false)}>
+          <p>返回后会显示 A 的偏好。请先交还设备，B 尚未提交的内容不会保存。</p>
+          <button className="button primary" type="button" onClick={onBack}>
+            已交还 A，继续
+          </button>
+          <button
+            className="button secondary"
+            type="button"
+            onClick={() => setBackConfirm(false)}
+          >
+            继续填写 B 的期待
+          </button>
+        </Modal>
+      )}
+    </main>
   );
 }
