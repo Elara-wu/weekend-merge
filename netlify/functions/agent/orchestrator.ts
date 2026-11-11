@@ -8,10 +8,10 @@ import { ModelFinalSchema, type AgentModel, type ModelInput } from "./model";
 import { PlaceListSchema, type Place } from "./tools/contracts";
 import { shanghaiPlaces } from "./tools/places";
 import { interestMatchesTags } from "./tools/preferences";
-import { createAgentTools, toolInputSchemas, type AgentTools } from "./tools/registry";
+import { createAgentTools, toolInputSchemas, weatherScopeForRequest, type AgentTools } from "./tools/registry";
 import { AgentToolError, type WeatherOutput } from "./tools/weather";
 
-const CallSchema = z.object({ id: z.string().min(1), name: z.string().min(1), args: z.unknown() });
+const CallSchema = z.object({ id: z.string().min(1), wireId: z.string().min(1).optional(), name: z.string().min(1), args: z.unknown() });
 const CallsSchema = z.union([
   CallSchema.extend({ type: z.literal("tool_call") }).transform((call) => [call]),
   z.object({ type: z.literal("tool_calls"), calls: z.array(CallSchema).min(1) }).transform(({ calls }) => calls),
@@ -80,10 +80,10 @@ export async function runPlanningAgent(input: PlanRequest, dependencies: {
           const started = now().getTime();
           try {
             // Parse even injected tools' inputs; no dynamic property outside the whitelist.
-            const args = toolInputSchemas[tool].parse(call.args);
+            const args = tool === "get_weather" ? weatherScopeForRequest(request) : toolInputSchemas[tool].parse(call.args);
             const execute = tools[tool] as (input: unknown) => unknown | Promise<unknown>;
             const output = await execute(args);
-            results.push({ id: call.id, name: tool, output });
+            results.push({ id: call.id, ...(call.wireId ? { wireId: call.wireId } : {}), name: tool, output });
             if (tool === "get_weather") weather = output as WeatherOutput;
             emit({ type: "tool.completed", tool, summary: { calls: 1 }, durationMs: Math.max(0, Math.round(now().getTime() - started)), source: tool === "get_weather" ? "open-meteo" : "local" });
           } catch (error) {

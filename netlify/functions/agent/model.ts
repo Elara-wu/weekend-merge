@@ -8,7 +8,7 @@ export const ModelFinalSchema = z.object({
   plans: z.array(ItinerarySchema).length(3),
 });
 
-export type ModelToolCall = { id: string; name: string; args: unknown };
+export type ModelToolCall = { id: string; wireId?: string; name: string; args: unknown };
 export type ModelTurn =
   | ({ type: "tool_call" } & ModelToolCall)
   | { type: "tool_calls"; calls: ModelToolCall[] }
@@ -16,7 +16,7 @@ export type ModelTurn =
 
 export type ModelInput = {
   request: PlanRequest;
-  toolResults: Array<{ id: string; name: ToolName; output: unknown }>;
+  toolResults: Array<{ id: string; wireId?: string; name: ToolName; output: unknown }>;
   validationFeedback?: string[];
 };
 

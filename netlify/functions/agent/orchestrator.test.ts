@@ -52,10 +52,14 @@ function candidates(events: AgentEvent[]) {
 
 describe("controlled planning orchestrator", () => {
   it("returns parallel results with original IDs, verifies three plans, and emits schema-valid events", async () => {
-    const script = scripted([{ type: "tool_calls", calls: [weatherCall, { id: "search-2", name: "search_places", args: { limit: 4 } }] }, final]);
+    const script = scripted([{ type: "tool_calls", calls: [
+      { ...weatherCall, wireId: "weather-wire-1" },
+      { id: "search-2", wireId: "search-wire-2", name: "search_places", args: { limit: 4 } },
+    ] }, final]);
     const events = await runPlanningAgent(request, { ...dependencies(), model: script.model });
     expect(script.inputs).toHaveLength(2);
     expect(script.inputs[1].toolResults).toMatchObject([{ id: "weather-1", name: "get_weather" }, { id: "search-2", name: "search_places" }]);
+    expect(script.inputs[1].toolResults.map((result) => result.wireId)).toEqual(["weather-wire-1", "search-wire-2"]);
     expect(events.filter((event) => event.type === "tool.completed")).toHaveLength(5);
     expect(events.filter((event) => event.type === "step.started").map((event) => event.step)).toEqual(["VALIDATE", "ANALYZE", "GATHER", "PROPOSE", "VERIFY"]);
     expect(events.every((event) => AgentEventSchema.safeParse(event).success)).toBe(true);
@@ -167,6 +171,42 @@ describe("controlled planning orchestrator", () => {
     expect(events.some((event) => event.type === "run.degraded")).toBe(true);
     expect(candidates(events)).toHaveLength(3);
     expect(candidates(events).every((plan) => plan.id.includes("-rule-"))).toBe(true);
+  });
+
+  it("uses request-scoped Shanghai weather for model results and fallback", async () => {
+    const scopes: unknown[] = [];
+    const tools = createAgentTools({ request, places, weather: async (scope) => {
+      scopes.push(scope);
+      return { source: "open-meteo", hourly: [{
+        time: "2026-11-14T12:00", temperatureC: 20,
+        precipitationProbability: scope.latitude === 35.68 ? 100 : 0, weatherCode: 0,
+      }] };
+    } });
+    const foreignCall = { ...weatherCall, args: {
+      latitude: 35.68, longitude: 139.69,
+      start: "2026-11-15T11:00:00+09:00", end: "2026-11-15T18:00:00+09:00",
+    } };
+    const script = scripted([foreignCall, { type: "final", plans: [] }]);
+    const events = await runPlanningAgent(request, { places, now, tools, model: script.model });
+    expect(scopes).toEqual([{ latitude: 31.2304, longitude: 121.4737,
+      start: "2026-11-14T11:00:00+08:00", end: "2026-11-14T18:00:00+08:00" }]);
+    expect(script.inputs[1].toolResults[0].output).toMatchObject({ hourly: [{ precipitationProbability: 0 }] });
+    expect(events).toContainEqual({ type: "run.degraded", reason: "INVALID_MODEL_RESULT", fallback: "rule-planner" });
+    expect(candidates(events)).toHaveLength(3);
+    expect(candidates(events).every((plan) => plan.reasons.every((reason) => !reason.includes("降雨")))).toBe(true);
+  });
+
+  it("uses a next-day Shanghai midnight end for a 24:00 request", async () => {
+    const scopes: unknown[] = [];
+    const midnightRequest = { ...request, setup: { ...request.setup, endTime: "24:00" } };
+    const tools = createAgentTools({ request: midnightRequest, places, weather: async (scope) => {
+      scopes.push(scope);
+      return weather;
+    } });
+    await tools.get_weather({ latitude: 35.68, longitude: 139.69,
+      start: "2026-11-15T11:00:00+09:00", end: "2026-11-15T18:00:00+09:00" });
+    expect(scopes).toEqual([{ latitude: 31.2304, longitude: 121.4737,
+      start: "2026-11-14T11:00:00+08:00", end: "2026-11-15T00:00:00+08:00" }]);
   });
 
   it.each(["price", "schedule", "unknown place", "avoidance"])("rejects model candidates violating verified %s constraints", async (kind) => {

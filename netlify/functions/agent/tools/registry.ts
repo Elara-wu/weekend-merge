@@ -22,6 +22,20 @@ export const toolInputSchemas = {
   validate_plan: ValidatePlanInputSchema,
 };
 
+// People's Square is the fixed central Shanghai planning reference for MVP weather.
+export function weatherScopeForRequest(request: PlanRequest): WeatherInput {
+  const { date, startTime, endTime } = request.setup;
+  const endDate = endTime === "24:00"
+    ? new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)
+    : date;
+  return WeatherInputSchema.parse({
+    latitude: 31.2304,
+    longitude: 121.4737,
+    start: `${date}T${startTime}:00+08:00`,
+    end: `${endDate}T${endTime === "24:00" ? "00:00" : endTime}:00+08:00`,
+  });
+}
+
 type ToolOutputs = {
   get_weather: WeatherOutput;
   search_places: ReturnType<typeof searchPlaces>;
@@ -42,7 +56,10 @@ export function createAgentTools(config: {
   const places = config.places ?? shanghaiPlaces;
   const weather = config.weather ?? createWeatherTool({ now: config.now });
   return {
-    get_weather: (input) => weather(WeatherInputSchema.parse(input)),
+    get_weather: (input) => {
+      WeatherInputSchema.parse(input);
+      return weather(weatherScopeForRequest(config.request));
+    },
     search_places: (input) => searchPlaces(SearchPlacesInputSchema.parse(input), places),
     estimate_route: (input) => estimateRoute(EstimateRouteInputSchema.parse(input)),
     calculate_budget: (input) => calculateBudget(CalculateBudgetInputSchema.parse(input)),
