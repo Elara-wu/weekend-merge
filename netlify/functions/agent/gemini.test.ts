@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { PlanRequest } from "../../../src/contracts/agent";
 import { createGeminiModel } from "./gemini";
+import { runPlanningAgent } from "./orchestrator";
 import { createAgentTools } from "./tools/registry";
 
 const request: PlanRequest = {
@@ -32,12 +33,12 @@ describe("Gemini server adapter", () => {
     } };
     const model = createGeminiModel({ apiKey: "test-only", model: "configured-model", client });
     expect(await model.next({ request, toolResults: [] })).toEqual({ type: "tool_calls", calls: [
-      { id: "first", wireId: "first", name: "search_places", args: { limit: 4 } },
-      { id: "second", wireId: "second", name: "get_weather", args: { latitude: 31.17, longitude: 121.46 } },
+      { id: "internal-1-1", wireId: "first", name: "search_places", args: { limit: 4 } },
+      { id: "internal-1-2", wireId: "second", name: "get_weather", args: { latitude: 31.17, longitude: 121.46 } },
     ] });
     await model.next({ request, toolResults: [
-      { id: "first", wireId: "first", name: "search_places", output: { places: [] } },
-      { id: "second", wireId: "second", name: "get_weather", output: { hourly: [] } },
+      { id: "internal-1-1", wireId: "first", name: "search_places", output: { places: [] } },
+      { id: "internal-1-2", wireId: "second", name: "get_weather", output: { hourly: [] } },
     ] });
     expect(inputs).toHaveLength(2);
     const declarations = inputs[0].config?.tools?.flatMap((tool) => "functionDeclarations" in tool ? tool.functionDeclarations ?? [] : []) ?? [];
@@ -70,17 +71,70 @@ describe("Gemini server adapter", () => {
       },
     } });
     expect(await model.next({ request, toolResults: [] })).toEqual({ type: "tool_calls", calls: [
-      { id: "call-1", name: "search_places", args: { limit: 3 } },
-      { id: "call-2", name: "search_places", args: { limit: 4 } },
+      { id: "internal-1-1", name: "search_places", args: { limit: 3 } },
+      { id: "internal-1-2", name: "search_places", args: { limit: 4 } },
     ] });
     await model.next({ request, toolResults: [
-      { id: "call-1", name: "search_places", output: { places: [] } },
-      { id: "call-2", name: "search_places", output: { places: [] } },
+      { id: "internal-1-1", name: "search_places", output: { places: [] } },
+      { id: "internal-1-2", name: "search_places", output: { places: [] } },
     ] });
     const reply = (inputs[1].contents as Content[])[2];
     expect(reply.parts?.map((part) => part.functionResponse)).toEqual([
       { name: "search_places", response: { output: { places: [] } } },
       { name: "search_places", response: { output: { places: [] } } },
+    ]);
+  });
+
+  it("keeps mixed wire and ID-less parallel calls distinct through orchestration", async () => {
+    const inputs: GenerateContentParameters[] = [];
+    const model = createGeminiModel({ apiKey: "test-only", model: "configured-model", client: {
+      generateContent: async (input) => {
+        inputs.push(input);
+        return response(inputs.length === 1
+          ? { role: "model", parts: [
+            { functionCall: { id: "call-2", name: "search_places", args: { limit: 1 } } },
+            { functionCall: { name: "search_places", args: { limit: 2 } } },
+          ] }
+          : { role: "model", parts: [{ text: '{"type":"final","plans":[]}' }] });
+      },
+    } });
+    const events = await runPlanningAgent(request, { model, now: () => new Date("2026-11-11T00:00:00Z") });
+    expect(inputs).toHaveLength(2);
+    expect(events.filter((event) => event.type === "tool.completed" && event.tool === "search_places")).toHaveLength(2);
+    expect(events.some((event) => event.type === "tool.failed" && event.code === "DUPLICATE_TOOL_CALL_ID")).toBe(false);
+    const reply = (inputs[1].contents as Content[])[2];
+    expect(reply.parts?.map((part) => ({
+      id: part.functionResponse?.id,
+      count: (part.functionResponse?.response?.output as { places: unknown[] }).places.length,
+    }))).toEqual([{ id: "call-2", count: 1 }, { id: undefined, count: 2 }]);
+  });
+
+  it("keeps duplicate supplied wire IDs as received while internal IDs stay distinct", async () => {
+    const inputs: GenerateContentParameters[] = [];
+    const model = createGeminiModel({ apiKey: "test-only", model: "configured-model", client: {
+      generateContent: async (input) => {
+        inputs.push(input);
+        return response(inputs.length === 1
+          ? { role: "model", parts: [
+            { functionCall: { id: "same-wire", name: "search_places", args: { limit: 1 } } },
+            { functionCall: { id: "same-wire", name: "search_places", args: { limit: 2 } } },
+          ] }
+          : { role: "model", parts: [{ text: '{"type":"final","plans":[]}' }] });
+      },
+    } });
+    const turn = await model.next({ request, toolResults: [] });
+    expect(turn).toEqual({ type: "tool_calls", calls: [
+      { id: "internal-1-1", wireId: "same-wire", name: "search_places", args: { limit: 1 } },
+      { id: "internal-1-2", wireId: "same-wire", name: "search_places", args: { limit: 2 } },
+    ] });
+    await model.next({ request, toolResults: [
+      { id: "internal-1-1", wireId: "same-wire", name: "search_places", output: { result: 1 } },
+      { id: "internal-1-2", wireId: "same-wire", name: "search_places", output: { result: 2 } },
+    ] });
+    const reply = (inputs[1].contents as Content[])[2];
+    expect(reply.parts?.map((part) => part.functionResponse)).toEqual([
+      { id: "same-wire", name: "search_places", response: { output: { result: 1 } } },
+      { id: "same-wire", name: "search_places", response: { output: { result: 2 } } },
     ]);
   });
 

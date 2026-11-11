@@ -69,9 +69,11 @@ export function createGeminiModel(config: {
   // Per-request history keeps function IDs and opaque thought signatures intact.
   // Nothing in this history is emitted as a public event or written to logs.
   const histories = new WeakMap<PlanRequest, Content>();
+  let turnSequence = 0;
 
   return {
     async next(input) {
+      const currentTurn = ++turnSequence;
       try {
         const contents: Content[] = [{ role: "user", parts: [{ text: JSON.stringify(input.request) }] }];
         const finalTurn = input.toolResults.length > 0;
@@ -106,7 +108,7 @@ export function createGeminiModel(config: {
         });
         const content = response.candidates?.[0]?.content;
         const calls = content?.parts?.flatMap((part, index) => part.functionCall ? [{
-          id: part.functionCall.id ?? `call-${index + 1}`,
+          id: `internal-${currentTurn}-${index + 1}`,
           ...(part.functionCall.id ? { wireId: part.functionCall.id } : {}),
           name: part.functionCall.name ?? "unknown",
           args: part.functionCall.args,
