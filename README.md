@@ -1,99 +1,57 @@
 # Weekend Merge / 周末共识局
 
-一个面向两人周末决策的可观察 AI Agent。双方分别填写兴趣、预算和雷区，系统通过天气、地点、路线与预算工具生成三套折中方案；否决某一站后，只重新规划受影响区段。
-
-> 当前仓库是可协作的前端骨架：完整用户路径使用确定性演示事件运行，真实 Gemini Agent 将在相同契约下接入。
+一个面向两人周末决策的可观察规划工具。双方填写兴趣、预算和避让项，服务端可生成三套上海行程；否决站点后可在保留锁定站点的前提下局部重排。
 
 ## 当前可用
 
-- 创建上海周末计划。
-- A / B 分别填写偏好，中间经过隐私交接遮罩。
-- 展示共同偏好、冲突和硬约束。
-- 在规划工作台比较三个候选方案。
-- 查看天气、地点、路线和预算工具的执行证据。
-- 切换方案并锁定行程节点。
-- 浏览器刷新后恢复当前步骤。
-- Netlify Function 以 NDJSON 返回同一套演示事件。
+- 前端提供双人偏好向导、隐私交接、三个演示候选方案和规划工作台，刷新后恢复当前步骤。浏览器工作台目前使用 `createDemoRun()` 展示 fixture，尚未连接 HTTP Agent。
+- `POST /.netlify/functions/plan` 接受完整请求。`mode: "demo"` 返回固定展示事件；`mode: "live"` 运行受控 Agent。未配置 Gemini 时，实时请求会发出 `run.degraded` 并使用确定性规则方案。
+- `POST /.netlify/functions/replan` 在本地替换一个被否决的目录地点，最多重排两轮，保留锁定站点，返回一个候选方案和差异。
+- 两个端点成功时均返回经过共享 Schema 校验的 NDJSON 事件；请求错误返回结构化 JSON。
 
 ## 快速开始
 
-要求 Node.js 22 或更高版本。
+要求 Node.js 22 或更高版本（Gemini 官方 SDK 的运行要求）。
 
 ```bash
 npm install
 npm run dev
 ```
 
-默认地址为 `http://localhost:5173`。
+Vite 前端默认位于 `http://localhost:5173`，目前无需密钥。要在本地调用 Netlify Functions，另需安装 Netlify CLI 并在项目目录运行 `netlify dev`；其默认代理地址为 `http://localhost:8888`。完整请求和可执行的 `curl` 示例见 [演示步骤](docs/DEMO.md)。
 
 ```bash
 npm test -- --run
 npm run build
 ```
 
-应用默认使用演示模式，不需要任何 API Key。后续接入真实 Agent 时，将 `.env.example` 复制为 `.env.local` 并配置服务端环境变量；不要在 `VITE_` 变量或浏览器代码中放入密钥。
+## 服务端配置
 
-## 前端开发入口
+`.env.example` 只列出变量名：`GEMINI_API_KEY` 和 `GEMINI_MODEL`。需要 Gemini 时将它们配置为 Netlify Function 的服务端环境变量；本地开发可放在未提交的 `.env` 中。两者都存在才会创建模型。不要使用 `VITE_` 前缀或将密钥放进浏览器代码。未配置或模型失败时，`mode: "live"` 会显式降级为规则规划；规则规划不请求天气，也不伪造预报。
+
+部署需提供 Node.js 22+、Netlify Functions，以及可选的服务端 Gemini 配置。`netlify.toml` 已设置构建命令和 Node 版本。调用天气工具时依赖 Open-Meteo 的可用性；服务配额和使用政策需按实际部署核对。
+
+## 接口与数据边界
 
 | 路径 | 职责 |
 | --- | --- |
-| `src/features/wizard/` | 创建计划与 A/B 私密偏好向导 |
-| `src/features/workbench/` | 候选方案、路线舞台、Agent 轨迹与站点操作 |
-| `src/styles/` | 全局视觉 token、桌面与移动端布局 |
-| `src/state/usePlanningStore.ts` | 可持久化的用户流程状态 |
-| `src/contracts/agent.ts` | 前后端共享 Schema，不应在 UI 内复制类型 |
-| `src/demo/demoRun.ts` | 前端可直接使用的稳定 Agent fixture |
-| `netlify/functions/plan.ts` | NDJSON 接口桩，未来替换为真实编排器 |
+| `src/contracts/agent.ts` | 前后端共享的请求、行程和事件 Schema |
+| `netlify/functions/plan.ts` | 演示/实时规划入口与 NDJSON 响应 |
+| `netlify/functions/replan.ts` | 确定性局部重排入口 |
+| `netlify/functions/agent/` | Gemini 适配器、状态机、规则降级与五个工具 |
+| `data/places.shanghai.json` | 带来源、开放时间及 `lastVerifiedAt` 的静态上海地点目录 |
+| `src/demo/demoRun.ts` | 前端展示 fixture，不保证地点 ID 均在服务端目录中 |
 
-前端开发不需要等待 Agent 后端。组件应消费 `AgentEvent[]` 或共享类型，后端保持相同事件协议即可替换演示数据。
+五个白名单工具是 `get_weather`、`search_places`、`estimate_route`、`calculate_budget`、`validate_plan`。天气范围由服务端依据请求日期/时间固定为上海人民广场坐标；地点资料和路线、费用是静态数据或估算，不是实时营业、交通或票价信息。出发前应核对地点营业时间、票价和路线。详见 [架构](docs/ARCHITECTURE.md)。
 
-## 协作边界
-
-### 前端体验负责人
-
-- 完善向导、地图工作台和响应式底部抽屉。
-- 将当前路线抽象舞台替换为 Leaflet + OpenStreetMap。
-- 完成点赞、否决、锁定和差异对比交互。
-- 完成最终行程与分享长图。
-
-### Agent / 全栈负责人
-
-- 实现天气、地点、路线、预算和方案验证工具。
-- 将 `plan` 接口桩替换为真实受控状态机。
-- 接入 Gemini Function Calling、超时、限流和规则降级。
-- 实现局部重新规划接口与后端场景测试。
-
-### 共享规则
-
-- 修改 `src/contracts/agent.ts` 必须双方评审。
-- UI 不展示隐藏思维链，只显示工具、证据、约束和错误状态。
-- Pull Request 必须通过测试和生产构建。
-- `main` 保持可部署，功能开发使用短分支。
-
-## Agent 事件协议
-
-接口返回 `application/x-ndjson`，每行一个经过 Zod 校验的事件：
-
-```text
-run.started
-step.started
-tool.completed | tool.failed
-plan.proposed
-run.degraded
-run.completed | run.failed
-```
-
-`createDemoRun()` 和 `/.netlify/functions/plan` 产生相同协议，前端可以在本地 fixture 与 HTTP 流之间切换，而无需修改展示组件。
+成功响应的事件类型为 `run.started`、`step.started`、`tool.completed` / `tool.failed`、`plan.proposed`、`run.degraded`，并以一个 `run.completed` 或 `run.failed` 结束。初始规划完成事件的 `candidateIds` 有三个元素，没有 `diff`；重排完成事件的 `candidateIds` 有一个元素和必需的 `diff`。展示 fixture 中的候选地点并非全都收录于服务端目录，因此不能直接拿 `createDemoRun()` 的方案提交给重排接口。
 
 ## 文档
 
+- [架构与降级路径](docs/ARCHITECTURE.md)
+- [本地 API 演示](docs/DEMO.md)
 - [产品需求与系统设计](docs/PRD.md)
 - [Agent 事件契约](src/contracts/agent.ts)
-- [确定性演示运行](src/demo/demoRun.ts)
-
-## 免费服务边界
-
-MVP 计划使用 Open-Meteo、OpenStreetMap、仓库内上海地点数据和 Gemini 免费层。它们适合低流量作品集演示，但都有配额、署名或使用政策限制，不能描述为无限免费。完整边界见 [PRD](docs/PRD.md#13-免费服务边界)。
 
 ## 项目状态
 
@@ -101,7 +59,8 @@ MVP 计划使用 Open-Meteo、OpenStreetMap、仓库内上海地点数据和 Gem
 - [x] 双人偏好向导
 - [x] 演示模式规划工作台
 - [x] 测试、构建和 CI
+- [x] 真实 Agent 工具链与规则降级
+- [x] 局部重新规划 API
+- [ ] 浏览器工作台接入实时 Agent 与重排 API
 - [ ] Leaflet 地图与移动端抽屉
-- [ ] 真实 Agent 工具链
-- [ ] 局部重新规划
 - [ ] 最终分享页与在线 Demo
