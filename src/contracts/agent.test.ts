@@ -116,7 +116,7 @@ describe("AgentEventSchema", () => {
       result: {
         runId: "run-001",
         consensus: { shared: [], conflicts: [], constraints: [] },
-        candidateIds: ["plan-1", "plan-2", "plan-3"],
+        candidateIds: ["plan-1"],
         diff: {
           replacedStopIds: ["stop-1"],
           preservedStopIds: ["stop-2"],
@@ -126,6 +126,16 @@ describe("AgentEventSchema", () => {
     });
 
     expect(result.type).toBe("run.completed");
+  });
+
+  it.each([
+    { candidateIds: ["plan-1"] },
+    { candidateIds: ["plan-1", "plan-2"] },
+    { candidateIds: ["plan-1", "plan-2", "plan-3"], diff: { replacedStopIds: [], preservedStopIds: [], summary: "replan" } },
+  ])("rejects ambiguous initial/replan completion identities: %j", (result) => {
+    expect(AgentEventSchema.safeParse({ type: "run.completed", result: {
+      runId: "run-1", consensus: { shared: [], conflicts: [], constraints: [] }, ...result,
+    } }).success).toBe(false);
   });
 });
 

@@ -110,8 +110,15 @@ export const PlanDiffSchema = z.object({
 export const PlanResultSchema = z.object({
   runId: z.string().min(1),
   consensus: ConsensusSummarySchema,
-  candidateIds: z.array(z.string()).length(3),
+  candidateIds: z.array(z.string().min(1)),
   diff: PlanDiffSchema.optional(),
+}).superRefine((result, context) => {
+  // Initial planning proposes three options; local replan replaces one selected plan.
+  const expected = result.diff ? 1 : 3;
+  if (result.candidateIds.length !== expected) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["candidateIds"],
+      message: result.diff ? "Replan must return one candidate" : "Initial planning must return three candidates" });
+  }
 });
 
 const RunStartedEventSchema = z.object({
