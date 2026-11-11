@@ -1,0 +1,228 @@
+[
+  {
+    "placeId": "west-bund-museum",
+    "name": "西岸美术馆",
+    "category": "exhibition",
+    "area": "徐汇滨江",
+    "address": "徐汇区龙腾大道2600号",
+    "latitude": 31.1744,
+    "longitude": 121.4605,
+    "tags": ["展览", "艺术", "当代艺术"],
+    "indoor": true,
+    "priceRange": { "min": 0, "max": 150 },
+    "weeklyOpeningHours": [
+      { "days": ["monday"], "intervals": [] },
+      { "days": ["tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "11:00", "close": "18:00" }] }
+    ],
+    "sourceUrl": "https://wbmshanghai.com/en/page/visit",
+    "lastVerifiedAt": "2026-11-11"
+  },
+  {
+    "placeId": "shanghai-museum-east",
+    "name": "上海博物馆东馆",
+    "category": "exhibition",
+    "area": "世纪大道",
+    "address": "浦东新区世纪大道1952号",
+    "latitude": 31.2248,
+    "longitude": 121.5415,
+    "tags": ["展览", "历史", "文物"],
+    "indoor": true,
+    "priceRange": { "min": 0, "max": 0 },
+    "weeklyOpeningHours": [
+      { "days": ["tuesday"], "intervals": [] },
+      { "days": ["monday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "10:00", "close": "18:00" }] }
+    ],
+    "sourceUrl": "https://www.shanghaimuseum.cn/mu/frontend/pg/en/service/visit-east",
+    "lastVerifiedAt": "2026-11-11"
+  },
+  {
+    "placeId": "long-museum-west-bund",
+    "name": "龙美术馆（西岸馆）",
+    "category": "exhibition",
+    "area": "徐汇滨江",
+    "address": "徐汇区龙腾大道3398号",
+    "latitude": 31.1653,
+    "longitude": 121.4622,
+    "tags": ["展览", "艺术", "当代艺术"],
+    "indoor": true,
+    "priceRange": { "min": 50, "max": 100 },
+    "weeklyOpeningHours": [
+      { "days": ["monday"], "intervals": [] },
+      { "days": ["tuesday", "wednesday", "thursday", "sunday"], "intervals": [{ "open": "10:00", "close": "17:30" }] },
+      { "days": ["friday", "saturday"], "intervals": [{ "open": "10:00", "close": "18:00" }] }
+    ],
+    "sourceUrl": "https://www.westbund.com/en/index/KEY-PROJECTS/event_list_1fcD5.html",
+    "lastVerifiedAt": "2026-11-11"
+  },
+  {
+    "placeId": "shanghai-book-city",
+    "name": "上海书城福州路店",
+    "category": "bookstore",
+    "area": "人民广场",
+    "address": "黄浦区福州路465号",
+    "latitude": 31.2312,
+    "longitude": 121.4809,
+    "tags": ["书店", "阅读", "文化"],
+    "indoor": true,
+    "priceRange": { "min": 0, "max": 0 },
+    "weeklyOpeningHours": [
+      { "days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "09:30", "close": "21:30" }] }
+    ],
+    "sourceUrl": "https://english.shanghai.gov.cn/en-EditorsPick-LivinginShanghai/20240423/253fa08e5a9e4de69015a71d727554d4.html",
+    "lastVerifiedAt": "2026-11-11"
+  },
+  {
+    "placeId": "jic-books-pujiang",
+    "name": "建投书局浦江店",
+    "category": "bookstore",
+    "area": "北外滩",
+    "address": "虹口区公平路18号嘉昱大厦8号楼1层",
+    "latitude": 31.2497,
+    "longitude": 121.5046,
+    "tags": ["书店", "阅读", "江景"],
+    "indoor": true,
+    "priceRange": { "min": 0, "max": 0 },
+    "weeklyOpeningHours": [
+      { "days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "10:00", "close": "18:30" }] }
+    ],
+    "sourceUrl": "https://english.shanghai.gov.cn/en-BookstoresLibraries/20240627/41438d3b6da04559a1342b9e47ddcb1d.html",
+    "lastVerifiedAt": "2026-11-11"
+  },
+  {
+    "placeId": "manner-xuhui-riverside",
+    "name": "Manner Coffee 徐汇滨江店",
+    "category": "cafe",
+    "area": "徐汇滨江",
+    "address": "徐汇区瑞宁路243号",
+    "latitude": 31.1719,
+    "longitude": 121.4637,
+    "tags": ["咖啡", "江景", "休息"],
+    "indoor": true,
+    "priceRange": { "min": 20, "max": 50 },
+    "weeklyOpeningHours": [
+      { "days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "08:00", "close": "21:30" }] }
+    ],
+    "sourceUrl": "https://english.shanghai.gov.cn/en-Cafes/20240521/330f5762c816485b8f6d6121c838c7dc.html",
+    "lastVerifiedAt": "2026-11-11"
+  },
+  {
+    "placeId": "starbucks-reserve-roastery",
+    "name": "星巴克臻选上海烘焙工坊",
+    "category": "cafe",
+    "area": "南京西路",
+    "address": "静安区南京西路789号",
+    "latitude": 31.2284,
+    "longitude": 121.4589,
+    "tags": ["咖啡", "烘焙", "休息", "排队"],
+    "indoor": true,
+    "priceRange": { "min": 40, "max": 110 },
+    "weeklyOpeningHours": [
+      { "days": ["monday", "tuesday", "wednesday", "thursday", "sunday"], "intervals": [{ "open": "08:00", "close": "23:00" }] },
+      { "days": ["friday", "saturday"], "intervals": [{ "open": "08:00", "close": "24:00" }] }
+    ],
+    "sourceUrl": "https://english.shanghai.gov.cn/en-Cafes/20240819/123212263749494a838d70a1c47d62dc.html",
+    "lastVerifiedAt": "2026-11-11"
+  },
+  {
+    "placeId": "shanghai-classical-restaurant",
+    "name": "上海老饭店豫园店",
+    "category": "dinner",
+    "area": "豫园",
+    "address": "黄浦区福佑路242号",
+    "latitude": 31.2261,
+    "longitude": 121.4936,
+    "tags": ["晚餐", "本帮菜", "传统"],
+    "indoor": true,
+    "priceRange": { "min": 100, "max": 220 },
+    "weeklyOpeningHours": [
+      { "days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "11:00", "close": "14:00" }, { "open": "17:00", "close": "20:30" }] }
+    ],
+    "sourceUrl": "https://english.shanghai.gov.cn/en-GlobalTasteinShanghai2026-LocalFlavors/20260522/856556bbb50a4f25bb5c6be935de932e.html",
+    "lastVerifiedAt": "2026-11-11"
+  },
+  {
+    "placeId": "lu-bo-lang-yuyuan",
+    "name": "绿波廊豫园店",
+    "category": "dinner",
+    "area": "豫园",
+    "address": "黄浦区豫园商城",
+    "latitude": 31.2263,
+    "longitude": 121.4929,
+    "tags": ["晚餐", "本帮菜", "传统"],
+    "indoor": true,
+    "priceRange": { "min": 120, "max": 260 },
+    "weeklyOpeningHours": [
+      { "days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "11:00", "close": "14:00" }, { "open": "17:00", "close": "20:30" }] }
+    ],
+    "sourceUrl": "https://english.shanghai.gov.cn/en-GlobalTasteinShanghai2026-LocalFlavors/20260522/856556bbb50a4f25bb5c6be935de932e.html",
+    "lastVerifiedAt": "2026-11-11"
+  },
+  {
+    "placeId": "fuxing-park",
+    "name": "复兴公园",
+    "category": "park",
+    "area": "淮海中路",
+    "address": "黄浦区雁荡路105号",
+    "latitude": 31.2165,
+    "longitude": 121.4669,
+    "tags": ["公园", "散步", "绿地"],
+    "indoor": false,
+    "priceRange": { "min": 0, "max": 0 },
+    "weeklyOpeningHours": [
+      { "days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "05:00", "close": "21:00" }] }
+    ],
+    "sourceUrl": "https://english.shanghai.gov.cn/en-Parks/20250220/636b3df5761e4055b731a92d2abddcb3.html",
+    "lastVerifiedAt": "2026-11-11"
+  },
+  {
+    "placeId": "century-park",
+    "name": "世纪公园",
+    "category": "park",
+    "area": "世纪公园",
+    "address": "浦东新区锦绣路1001号",
+    "latitude": 31.2151,
+    "longitude": 121.5549,
+    "tags": ["公园", "散步", "绿地"],
+    "indoor": false,
+    "priceRange": { "min": 0, "max": 0 },
+    "weeklyOpeningHours": [
+      { "days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "00:00", "close": "24:00" }] }
+    ],
+    "sourceUrl": "https://english.shanghai.gov.cn/en-Parks/20231220/489a4c048d594b1d9fec56e57214a284.html",
+    "lastVerifiedAt": "2026-11-11"
+  },
+  {
+    "placeId": "the-bund-promenade",
+    "name": "外滩滨江步道",
+    "category": "night-view",
+    "area": "外滩",
+    "address": "黄浦区中山东一路",
+    "latitude": 31.2381,
+    "longitude": 121.4919,
+    "tags": ["夜景", "江景", "散步", "排队"],
+    "indoor": false,
+    "priceRange": { "min": 0, "max": 0 },
+    "weeklyOpeningHours": [
+      { "days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "00:00", "close": "24:00" }] }
+    ],
+    "sourceUrl": "https://english.shanghai.gov.cn/en-ScenicSpots/20231205/584672cc6d044eabb5f7f6fc9049a19f.html",
+    "lastVerifiedAt": "2026-11-11"
+  },
+  {
+    "placeId": "north-bund-aviation-center",
+    "name": "北外滩国客中心滨江",
+    "category": "night-view",
+    "area": "北外滩",
+    "address": "虹口区杨树浦路100号",
+    "latitude": 31.2505,
+    "longitude": 121.5077,
+    "tags": ["夜景", "江景", "散步"],
+    "indoor": false,
+    "priceRange": { "min": 0, "max": 0 },
+    "weeklyOpeningHours": [
+      { "days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"], "intervals": [{ "open": "06:00", "close": "22:00" }] }
+    ],
+    "sourceUrl": "https://english.shanghai.gov.cn/en-ScenicSpots/20250220/f739259099f34a029a909c79327dd030.html",
+    "lastVerifiedAt": "2026-11-11"
+  }
+]
