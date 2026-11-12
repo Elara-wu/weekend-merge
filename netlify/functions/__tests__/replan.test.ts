@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import demoRequest from "../../tests/fixtures/plan-request.demo.json";
-import { AgentEventSchema, ReplanRequestSchema, type AgentEvent, type ReplanRequest } from "../../src/contracts/agent";
-import { shanghaiPlaces } from "./agent/tools/places";
-import { createReplanHandler } from "./replan";
+import demoRequest from "../../../tests/fixtures/plan-request.demo.json";
+import { AgentEventSchema, ReplanRequestSchema, type AgentEvent, type ReplanRequest } from "../../../src/contracts/agent";
+import { shanghaiPlaces } from "../agent/tools/places";
+import { createReplanHandler } from "../replan";
 const handler = createReplanHandler({ now: () => new Date("2026-11-12T00:00:00Z") });
 
 const url = "http://localhost/.netlify/functions/replan";

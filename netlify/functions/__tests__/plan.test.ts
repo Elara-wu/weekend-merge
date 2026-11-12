@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import demoRequest from "../../tests/fixtures/plan-request.demo.json";
-import { AgentEventSchema, PlanRequestSchema } from "../../src/contracts/agent";
-import { createPlanHandler } from "./plan";
-import { createPlanningLimiter } from "./agent/requestProtection";
+import demoRequest from "../../../tests/fixtures/plan-request.demo.json";
+import { AgentEventSchema, PlanRequestSchema } from "../../../src/contracts/agent";
+import { createPlanHandler } from "../plan";
+import { createPlanningLimiter } from "../agent/requestProtection";
 const now = () => new Date("2026-11-12T00:00:00Z");
 const handler = createPlanHandler({ now, limiter: createPlanningLimiter() });
 
