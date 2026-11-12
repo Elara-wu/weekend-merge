@@ -62,14 +62,21 @@ export function PreferenceStep({
     },
   );
   const [backConfirm, setBackConfirm] = useState(false);
-  const toggle = (key: "interests" | "foodTags" | "avoid", value: string) =>
+  const toggleInterest = (value: PersonPreferences["interests"][number]) =>
+    setDraft((old) => ({
+      ...old,
+      interests: old.interests.includes(value)
+        ? old.interests.filter((item) => item !== value)
+        : old.interests.length >= 5
+          ? old.interests
+          : [...old.interests, value],
+    }));
+  const toggleTextPreference = (key: "foodTags" | "avoid", value: string) =>
     setDraft((old) => ({
       ...old,
       [key]: old[key].includes(value)
-        ? old[key].filter((x) => x !== value)
-        : key === "interests" && old.interests.length >= 5
-          ? old[key]
-          : [...old[key], value],
+        ? old[key].filter((item) => item !== value)
+        : [...old[key], value],
     }));
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -129,7 +136,7 @@ export function PreferenceStep({
                     className="sr-only"
                     type="checkbox"
                     checked={draft.interests.includes(name)}
-                    onChange={() => toggle("interests", name)}
+                    onChange={() => toggleInterest(name)}
                     aria-label={name}
                   />
                   <span className="interest-icon">
@@ -239,7 +246,7 @@ export function PreferenceStep({
                   className="sr-only"
                   type="checkbox"
                   checked={draft.foodTags.includes(value)}
-                  onChange={() => toggle("foodTags", value)}
+                  onChange={() => toggleTextPreference("foodTags", value)}
                 />
                 {value}
               </label>
@@ -266,7 +273,7 @@ export function PreferenceStep({
                   className="sr-only"
                   type="checkbox"
                   checked={draft.avoid.includes(value)}
-                  onChange={() => toggle("avoid", value)}
+                  onChange={() => toggleTextPreference("avoid", value)}
                 />
                 {value}
               </label>
