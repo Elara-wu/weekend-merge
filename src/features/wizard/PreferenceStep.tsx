@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from "react";
 
-import type { PersonPreferences } from "@/contracts/agent";
+import { InterestSchema, type PersonPreferences } from "@/contracts/agent";
 
-const interests = ["展览", "咖啡", "城市散步", "自然", "电影", "桌游", "夜景", "逛店", "美食"];
+const interests = InterestSchema.options;
 const avoidOptions = ["排队", "拥挤", "长距离步行", "早起", "辛辣", "酒吧", "户外日晒"];
 
 type PreferenceStepProps = {
@@ -10,7 +10,7 @@ type PreferenceStepProps = {
   onSubmit: (preferences: PersonPreferences) => void;
 };
 
-function toggleValue(current: string[], value: string, limit?: number) {
+function toggleValue<T extends string>(current: T[], value: T, limit?: number) {
   if (current.includes(value)) {
     return current.filter((item) => item !== value);
   }
@@ -21,7 +21,7 @@ function toggleValue(current: string[], value: string, limit?: number) {
 }
 
 export function PreferenceStep({ person, onSubmit }: PreferenceStepProps) {
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
+  const [selectedInterests, setSelectedInterests] = useState<PersonPreferences["interests"]>([]);
   const [avoid, setAvoid] = useState<string[]>([]);
   const [pace, setPace] = useState<PersonPreferences["pace"]>("轻松");
   const [walkingLimitKm, setWalkingLimitKm] = useState<PersonPreferences["walkingLimitKm"]>(3);

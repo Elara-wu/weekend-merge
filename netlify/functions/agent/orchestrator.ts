@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
-import { AgentEventSchema, ItinerarySchema, PlanRequestSchema, ToolNameSchema, type AgentEvent, type Itinerary, type PlanRequest, type ToolName } from "../../../src/contracts/agent";
+import { ItinerarySchema, PlanRequestSchema, ToolNameSchema, type AgentEvent, type Itinerary, type PlanRequest } from "../../../src/contracts/agent";
+import { budgetEvidence, placesEvidence, routeEvidence, toolEvidence, validationEvidence, type CandidateValidation } from "./evidence";
+import type { CalculateBudgetOutput, EstimateRouteOutput } from "./tools/contracts";
+import { encodeAgentEvent } from "./http";
 import { analyzeConsensus } from "./fallbacks/consensus";
 import { createRulePlans, NoValidPlanError } from "./fallbacks/rulePlanner";
 import { ModelFinalSchema, type AgentModel, type ModelInput } from "./model";
@@ -25,13 +28,21 @@ const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.sl
 
 export async function runPlanningAgent(input: PlanRequest, dependencies: {
   model?: AgentModel;
+  onEvent?: (event: AgentEvent) => void;
   tools?: AgentTools;
   places?: readonly Place[];
   now?: () => Date;
 } = {}): Promise<AgentEvent[]> {
   const now = dependencies.now ?? (() => new Date());
   const events: AgentEvent[] = [];
-  const emit = (event: AgentEvent) => { events.push(AgentEventSchema.parse(event)); };
+  let deliveryFailed = false;
+  const emit = (original: AgentEvent) => {
+    if (deliveryFailed) throw new Error("Event delivery failed");
+    const { event } = encodeAgentEvent(original);
+    events.push(event);
+    try { dependencies.onEvent?.(event); }
+    catch (error) { deliveryFailed = true; throw error; }
+  };
   const step = (name: "VALIDATE" | "ANALYZE" | "GATHER" | "PROPOSE" | "VERIFY") => emit({ type: "step.started", step: name, at: now().toISOString() });
   const runId = `plan-${now().getTime()}-${randomUUID()}`;
   emit({ type: "run.started", runId, at: now().toISOString() });
@@ -47,7 +58,7 @@ export async function runPlanningAgent(input: PlanRequest, dependencies: {
     emit({ type: "run.failed", code: "INVALID_CATALOG", message: "Place catalog is invalid" });
     return events;
   }
-  const tools = dependencies.tools ?? createAgentTools({ request, places: places.data, now });
+  const tools = dependencies.tools ?? createAgentTools({ request, places: places.data, now: dependencies.now });
   const consensus = analyzeConsensus(request);
   let weather: WeatherOutput | undefined;
   let fallbackReason: string | undefined;
@@ -85,8 +96,9 @@ export async function runPlanningAgent(input: PlanRequest, dependencies: {
             const output = await execute(args);
             results.push({ id: call.id, ...(call.wireId ? { wireId: call.wireId } : {}), name: tool, output });
             if (tool === "get_weather") weather = output as WeatherOutput;
-            emit({ type: "tool.completed", tool, summary: { calls: 1 }, durationMs: Math.max(0, Math.round(now().getTime() - started)), source: tool === "get_weather" ? "open-meteo" : "local" });
+            emit({ type: "tool.completed", tool, summary: toolEvidence(tool, output, request, places.data, `tool-candidate-${index + 1}`), durationMs: Math.max(0, Math.round(now().getTime() - started)), source: tool === "get_weather" ? "open-meteo" : tool === "search_places" ? "curated-shanghai-catalog" : "local" });
           } catch (error) {
+            if (deliveryFailed) throw error;
             const weatherUnavailable = error instanceof AgentToolError && error.code === "WEATHER_UNAVAILABLE";
             const code = weatherUnavailable ? "WEATHER_UNAVAILABLE" : "TOOL_UNAVAILABLE";
             emit({ type: "tool.failed", tool, code, retryable: weatherUnavailable && error.retryable });
@@ -100,6 +112,7 @@ export async function runPlanningAgent(input: PlanRequest, dependencies: {
       if (!candidate.success) throw new PlanningError("INVALID_MODEL_RESULT");
       final = candidate.data;
     } catch (error) {
+      if (deliveryFailed) throw error;
       fallbackReason = error instanceof PlanningError ? error.code : "MODEL_UNAVAILABLE";
     }
   }
@@ -107,6 +120,18 @@ export async function runPlanningAgent(input: PlanRequest, dependencies: {
   step("PROPOSE");
   step("VERIFY");
   const placeById = new Map(places.data.map((place) => [place.placeId, place]));
+
+  const routes: EstimateRouteOutput[] = [];
+  const budgets: CalculateBudgetOutput[] = [];
+  const validations: CandidateValidation[] = [];
+  const verificationStarted = now().getTime();
+  function emitVerification() {
+    for (const [tool, summary] of [
+      ["estimate_route", routeEvidence(routes)], ["calculate_budget", budgetEvidence(budgets, request.setup.budget)],
+      ["validate_plan", validationEvidence(validations)],
+    ] as const) emit({ type: "tool.completed", tool, summary,
+      durationMs: Math.max(0, Math.round(now().getTime() - verificationStarted)), source: "local" });
+  }
 
   async function verify(proposals: Itinerary[], fromModel = false): Promise<Itinerary[]> {
     if (proposals.length !== 3 || new Set(proposals.map((plan) => plan.id)).size !== 3 ||
@@ -148,9 +173,15 @@ export async function runPlanningAgent(input: PlanRequest, dependencies: {
       const validation = await tools.validate_plan(toolInputSchemas.validate_plan.parse({ plan,
         walkingDistanceKm: route.legs.filter((leg) => leg.mode === "walking").reduce((sum, leg) => sum + leg.distanceKm, 0),
       }));
+      routes.push(route);
+      budgets.push(budget);
+      const insufficientTravelTime = route.legs.some((leg, index) =>
+        minutes(plan.stops[index + 1].startTime) - minutes(plan.stops[index].endTime) < leg.durationMinutes);
+      validations.push({ candidateId: plan.id, validation: insufficientTravelTime ? { ...validation, valid: false,
+        violations: [...validation.violations, { code: "OUTSIDE_TIME_RANGE", message: "Insufficient travel time", affectedStopIds: [] }],
+      } : validation });
       // validatePlan checks opening and hard constraints; also reserve actual leg travel time.
-      if (!validation.valid || route.legs.some((leg, index) =>
-        minutes(plan.stops[index + 1].startTime) - minutes(plan.stops[index].endTime) < leg.durationMinutes)) {
+      if (!validation.valid || insufficientTravelTime) {
         throw new PlanningError("INVALID_MODEL_RESULT");
       }
       verified.push(plan);
@@ -158,26 +189,31 @@ export async function runPlanningAgent(input: PlanRequest, dependencies: {
     return verified;
   }
 
-  const verificationStarted = now().getTime();
   let verified: Itinerary[] | undefined;
   if (final) {
     try { verified = await verify(final.plans, true); }
-    catch { fallbackReason = "INVALID_MODEL_RESULT"; }
+    catch (error) { if (deliveryFailed) throw error; fallbackReason = "INVALID_MODEL_RESULT"; }
   }
   if (!verified) {
     emit({ type: "run.degraded", reason: fallbackReason ?? "INVALID_MODEL_RESULT", fallback: "rule-planner" });
     try {
       verified = await verify(createRulePlans({ request, places: places.data, weather }));
     } catch (error) {
-      emit({ type: "run.failed", code: error instanceof NoValidPlanError ? error.code : "NO_VALID_PLAN", message: "No three verified plans satisfy the request" });
+      if (deliveryFailed) throw error;
+      emitVerification();
+      emit({ type: "run.failed", code: error instanceof NoValidPlanError ? error.code : "NO_VALID_PLAN", message: "No three verified plans satisfy the request",
+        ...(error instanceof NoValidPlanError ? { constraintCodes: error.violatedConstraintCodes } : {}),
+      });
       return events;
     }
   }
-  // Mandatory application verification is separate from the six model-requested calls.
-  for (const tool of ["estimate_route", "calculate_budget", "validate_plan"] satisfies ToolName[]) {
-    emit({ type: "tool.completed", tool, summary: { candidates: 3, verification: true },
-      durationMs: Math.max(0, Math.round(now().getTime() - verificationStarted)), source: "local" });
+  // Mandatory application verification is separate from model-requested calls.
+  if (!events.some((event) => event.type === "tool.completed" && event.tool === "search_places")) {
+    const selected = new Set(verified.flatMap((plan) => plan.stops.map((stop) => stop.placeId)));
+    emit({ type: "tool.completed", tool: "search_places", summary: placesEvidence(places.data.filter((place) => selected.has(place.placeId))),
+      durationMs: 0, source: "curated-shanghai-catalog" });
   }
+  emitVerification();
   for (const plan of verified) emit({ type: "plan.proposed", plan });
   emit({ type: "run.completed", result: { runId, consensus, candidateIds: verified.map((plan) => plan.id) } });
   return events;

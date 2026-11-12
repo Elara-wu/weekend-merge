@@ -20,11 +20,11 @@ const AVOID_TAGS: Record<string, readonly string[]> = {
 type WalkingPreference = { walkingLimitKm: number; avoid: readonly string[] };
 
 export function interestMatchesTags(interest: string, tags: readonly string[]): boolean {
-  return (INTEREST_TAGS[interest] ?? [interest]).some((tag) => tags.includes(tag));
+  return (Object.hasOwn(INTEREST_TAGS, interest) ? INTEREST_TAGS[interest] : [interest]).some((tag) => tags.includes(tag));
 }
 
 export function expandedAvoidTags(avoid: readonly string[]): string[] {
-  return [...new Set(avoid.flatMap((label) => AVOID_TAGS[label] ??
+  return [...new Set(avoid.flatMap((label) => (Object.hasOwn(AVOID_TAGS, label) ? AVOID_TAGS[label] : undefined) ??
     (["长距离步行", "早起", "户外日晒"].includes(label) ? [] : [label])))];
 }
 

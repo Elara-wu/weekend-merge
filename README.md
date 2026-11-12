@@ -7,7 +7,7 @@
 - 前端提供双人偏好向导、隐私交接、三个演示候选方案和规划工作台，刷新后恢复当前步骤。浏览器工作台目前使用 `createDemoRun()` 展示 fixture，尚未连接 HTTP Agent。
 - `POST /.netlify/functions/plan` 接受完整请求。`mode: "demo"` 返回固定展示事件；`mode: "live"` 运行受控 Agent。未配置 Gemini 时，实时请求会发出 `run.degraded` 并使用确定性规则方案。
 - `POST /.netlify/functions/replan` 在本地替换一个被否决的目录地点，保留锁定站点，返回一个候选方案和差异。可信客户端按 `replanCount` 约定最多执行两轮；无数据库的服务端不记录会话轮次。
-- 两个端点成功时均返回经过共享 Schema 校验的 NDJSON 事件；请求错误返回结构化 JSON。
+- 两个端点成功时均返回经过共享 Schema 校验的 NDJSON 事件；`plan` 逐行推送进度，`replan` 返回有界的缓冲响应。请求错误返回结构化 JSON。
 
 ## 快速开始
 
@@ -42,7 +42,15 @@ npm run build
 | `data/places.shanghai.json` | 带来源、开放时间及 `lastVerifiedAt` 的静态上海地点目录 |
 | `src/demo/demoRun.ts` | 前端展示 fixture，不保证地点 ID 均在服务端目录中 |
 
+请求体在 JSON 解析前按实际 UTF-8 字节数限制为 32 KiB，超限返回 `413 REQUEST_TOO_LARGE`。设定只接受周六/周日、3–12 小时（结束可为 `24:00`）及共享上海区域白名单；HTTP 另按上海日期检查今天至未来 180 天。兴趣仅限界面九项、最多五项；饮食/避让各最多十项、每项最多 30 字符，愿望最多 80 字符。
+
+实时 `plan` 按可信 Netlify IP（`x-nf-client-connection-ip`，其次首个 `x-forwarded-for`，最后 `unknown`）和已验证的 `sessionId` 组合，每十分钟最多五次；演示请求不占用额度。计数器为模块级内存，最多保存 5,000 个键，清除过期/最早记录。受限时在创建 Gemini 或调用天气前返回 `429 RATE_LIMITED`、`retryable: true`。这只是 **warm-instance guard**，不提供跨实例、重启后或更换会话的持久分布式限流；生产配额仍需在提供商或持久网关层配置。
+
+重排支持可选 `reasonCode`：`CHANGE_PLACE`、`TOO_CROWDED`、`TOO_EXPENSIVE`、`TOO_MUCH_WALKING`、`PREFER_INDOOR`、`PREFER_OUTDOOR`、`CHANGE_ACTIVITY`。未提供时只按受支持中英文关键词解析；不识别的自由文本返回 `400 UNSUPPORTED_REPLAN_REASON`，不是通用自然语言理解。例：`不要再安排展览，想喝咖啡` 选择非展览咖啡地点，`想换成另一个展览` 选择另一展览。
+
 五个白名单工具是 `get_weather`、`search_places`、`estimate_route`、`calculate_budget`、`validate_plan`。天气范围由服务端依据请求日期/时间固定为上海人民广场坐标；地点资料和路线、费用是静态数据或估算，不是实时营业、交通或票价信息。出发前应核对地点营业时间、票价和路线。详见 [架构](docs/ARCHITECTURE.md)。
+
+工具事件仅公开白名单摘要：上海天气区间/温度/降雨范围、目录地点 ID/名称/核实日期、路线/步行/费用范围，以及按候选 ID 标记的验证/陈旧数据警告；不返回原始工具输出、自由文本偏好、提示词、API 错误或隐藏推理。`run.failed.constraintCodes` 可携带封闭枚举中的时间、预算、避让等无方案原因。
 
 成功响应的事件类型为 `run.started`、`step.started`、`tool.completed` / `tool.failed`、`plan.proposed`、`run.degraded`，并以一个 `run.completed` 或 `run.failed` 结束。初始规划完成事件的 `candidateIds` 有三个元素，没有 `diff`；重排完成事件的 `candidateIds` 有一个元素和必需的 `diff`。展示 fixture 中的候选地点并非全都收录于服务端目录，因此不能直接拿 `createDemoRun()` 的方案提交给重排接口。
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AgentEventSchema } from "../../../src/contracts/agent";
+import { AgentEventSchema, type AgentEvent } from "../../../src/contracts/agent";
 
 export function jsonError(status: number, code: string, message: string, field?: string, retryable = false): Response {
   return Response.json({ error: { code, message, ...(field ? { field } : {}), retryable } }, {
@@ -9,7 +9,29 @@ export function jsonError(status: number, code: string, message: string, field?:
 
 export async function parseJsonRequest<S extends z.ZodTypeAny>(request: Request, schema: S): Promise<{ data: z.output<S> } | { response: Response }> {
   let body: unknown;
-  try { body = await request.json(); }
+  try {
+    const reader = request.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    if (reader) {
+      try {
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          bytes += chunk.value.byteLength;
+          if (bytes > 32 * 1024) {
+            void reader.cancel().catch(() => {});
+            return { response: jsonError(413, "REQUEST_TOO_LARGE", "Request body exceeds 32 KiB.") };
+          }
+          chunks.push(chunk.value);
+        }
+      } finally { reader.releaseLock(); }
+    }
+    const buffer = new Uint8Array(bytes);
+    let offset = 0;
+    for (const chunk of chunks) { buffer.set(chunk, offset); offset += chunk.byteLength; }
+    body = JSON.parse(new TextDecoder().decode(buffer));
+  }
   catch { return { response: jsonError(400, "INVALID_REQUEST", "Request body must be valid JSON.") }; }
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
@@ -51,25 +73,48 @@ function assertJsonSafe(value: unknown, ancestors = new Set<object>()): void {
   ancestors.delete(value);
 }
 
+export function encodeAgentEvent(original: unknown): { event: AgentEvent; line: string } {
+  // Inspect original descriptors before schema normalization can read or erase them.
+  assertJsonSafe(original);
+  const event = AgentEventSchema.parse(original);
+  assertJsonSafe(event);
+  const line = JSON.stringify(event);
+  AgentEventSchema.parse(JSON.parse(line));
+  return { event, line };
+}
+
+const headers = { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" };
+const isTerminal = (event: AgentEvent) => event.type === "run.completed" || event.type === "run.failed";
+
 export function ndjson(events: readonly unknown[]): Response {
-  const validated = events.map((event) => {
-    // Inspect original descriptors first: schema parsing may read accessors or omit hidden hooks.
-    assertJsonSafe(event);
-    const parsed = AgentEventSchema.parse(event);
-    assertJsonSafe(parsed);
-    return parsed;
-  });
-  const terminals = validated.filter((event) => event.type === "run.completed" || event.type === "run.failed");
+  const validated = events.map(encodeAgentEvent);
+  const terminals = validated.filter(({ event }) => isTerminal(event));
   if (terminals.length !== 1 || validated.at(-1) !== terminals[0]) {
     throw new Error("Agent events must end in exactly one terminal event");
   }
-  const lines = validated.map((event) => {
-    const line = JSON.stringify(event);
-    // Validate the exact wire representation too: serialization can transform unknown values.
-    AgentEventSchema.parse(JSON.parse(line));
-    return line;
+  return new Response(`${validated.map(({ line }) => line).join("\n")}\n`, { headers });
+}
+
+export function ndjsonStream(produce: (emit: (event: unknown) => void) => Promise<unknown> | void): Response {
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      let terminal = false;
+      const encoder = new TextEncoder();
+      const emit = (original: unknown) => {
+        if (cancelled || terminal) throw new Error("Agent stream is closed");
+        const { event, line } = encodeAgentEvent(original);
+        controller.enqueue(encoder.encode(`${line}\n`));
+        if (isTerminal(event)) { terminal = true; controller.close(); }
+      };
+      // The producer runs independently of returning the Response; its first events enqueue immediately.
+      void Promise.resolve().then(() => produce(emit)).then(() => {
+        if (!terminal && !cancelled) throw new Error("Agent stream lacks terminal event");
+      }).catch(() => {
+        if (!terminal && !cancelled) emit({ type: "run.failed", code: "PLANNING_FAILED", message: "Planning could not be completed." });
+      });
+    },
+    cancel() { cancelled = true; },
   });
-  return new Response(`${lines.join("\n")}\n`, {
-    headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store" },
-  });
+  return new Response(stream, { headers });
 }

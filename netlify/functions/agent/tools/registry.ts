@@ -8,6 +8,8 @@ import { estimateRoute } from "./route";
 import { validatePlan } from "./validator";
 import { WeatherInputSchema, createWeatherTool, type WeatherInput, type WeatherOutput } from "./weather";
 
+const productionWeather = createWeatherTool();
+
 // Catalog, setup, preferences, and original locked plans are never tool arguments.
 export const ValidatePlanInputSchema = z.object({
   plan: ItinerarySchema,
@@ -54,7 +56,7 @@ export function createAgentTools(config: {
   now?: () => Date;
 }): AgentTools {
   const places = config.places ?? shanghaiPlaces;
-  const weather = config.weather ?? createWeatherTool({ now: config.now });
+  const weather = config.weather ?? (config.now ? createWeatherTool({ now: config.now }) : productionWeather);
   return {
     get_weather: (input) => {
       WeatherInputSchema.parse(input);

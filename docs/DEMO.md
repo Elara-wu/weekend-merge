@@ -94,6 +94,10 @@ curl -sS -N -X POST 'http://localhost:8888/.netlify/functions/replan' \
 
 响应只有一个 `plan.proposed`。最后的 `run.completed.result` 有一个 `candidateIds` 元素和 `diff`；被锁定的 `stop-0`、`stop-3` 保持原样。可信客户端应将 `replanCount` 从 0 递增到 1 后停止；Function 仅验证传入值为 0 或 1，不保存会话历史，因此不能阻止重复传入同一计数。重排完全本地运行，不依赖 Gemini 或天气服务。
 
+固定示例日期为周末 `2026-11-14`。HTTP 只接受上海今天至未来 180 天的周末，示例超期后请把两个请求中的 `setup.date` 改为有效周末；共享静态 Schema 不读取当前时间，因此 fixture 本身始终可测试。`plan` 可在模型等待期间逐行看到早期进度。相同 IP 与会话的实时请求每十分钟最多五次，超限返回可重试的 429；演示不占额度。
+
+重排的 `reason` 保留用于兼容，建议另传明确的 `reasonCode`（见 README）。只支持固定关键词；无法识别时返回 `UNSUPPORTED_REPLAN_REASON`。例如改为 `不要再安排展览，想喝咖啡` 会筛选咖啡且排除展览；`想换成另一个展览` 保持展览类别并排除当前地点。若固定/锁定站点使新类别无法满足硬约束，会返回 422。
+
 ## 锁定站点冲突
 
 同一请求中将被否决的 `stop-1` 加入锁定列表，会得到 HTTP 409 和 JSON 错误码 `LOCKED_STOP_CONFLICT`；此时不会返回 NDJSON。

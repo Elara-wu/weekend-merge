@@ -43,8 +43,8 @@ describe("PlanSetupSchema", () => {
     },
   );
 
-  it("accepts a real leap day", () => {
-    expect(PlanSetupSchema.safeParse({ ...validSetup, date: "2028-02-29" }).success).toBe(true);
+  it("accepts a real weekend leap day", () => {
+    expect(PlanSetupSchema.safeParse({ ...validSetup, date: "2032-02-29" }).success).toBe(true);
   });
 });
 

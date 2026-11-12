@@ -1,4 +1,4 @@
-import { PlanSetupSchema, type Itinerary, type PersonPreferences, type PlanSetup } from "../../../../src/contracts/agent";
+import { PlanDateSchema, type Itinerary, type PersonPreferences, type PlanSetup } from "../../../../src/contracts/agent";
 
 import type { Place } from "./contracts";
 import { effectiveWalkingLimitKm, violatesAvoidedStop } from "./preferences";
@@ -54,7 +54,7 @@ export function validatePlan(input: ValidatePlanInput): ValidationResult {
   const { plan, setup, preferences, places, lockedStopIds, originalPlan } = input;
   const violations: ValidationResult["violations"] = [];
   const warnings: ValidationResult["warnings"] = [];
-  if (!PlanSetupSchema.shape.date.safeParse(setup.date).success) {
+  if (!PlanDateSchema.safeParse(setup.date).success) {
     return {
       valid: false,
       violations: [{

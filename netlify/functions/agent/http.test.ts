@@ -68,3 +68,46 @@ describe("NDJSON boundary", () => {
     expect(await response.text()).toBe(`${JSON.stringify(failed)}\n`);
   });
 });
+
+// The streaming producer must receive the same descriptor/wire guards as buffered runs.
+it("streams a sanitized terminal after a producer throws and preserves prior progress", async () => {
+  const http = await import("./http");
+  const response = http.ndjsonStream(async (emit) => {
+    emit({ type: "run.started", runId: "stream", at: "2026-11-11T00:00:00.000Z" });
+    throw new Error("private provider key");
+  });
+  const lines = (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
+  expect(lines.map((event) => event.type)).toEqual(["run.started", "run.failed"]);
+  expect(JSON.stringify(lines)).not.toContain("private provider key");
+});
+
+it("does not emit a second terminal when the producer fails after completion", async () => {
+  const http = await import("./http");
+  const response = http.ndjsonStream(async (emit) => { emit(failed); throw new Error("late failure"); });
+  expect((await response.text()).trim().split("\n")).toHaveLength(1);
+});
+
+it("rejects a streaming getter before reading it and terminates once", async () => {
+  const http = await import("./http");
+  let reads = 0;
+  const bad = Object.defineProperty({ type: "tool.completed", tool: "validate_plan", durationMs: 0, source: "local" },
+    "summary", { enumerable: true, get: () => { reads++; return {}; } });
+  const response = http.ndjsonStream(async (emit) => { emit(bad); emit(failed); });
+  const lines = (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
+  expect(reads).toBe(0);
+  expect(lines).toHaveLength(1);
+  expect(lines[0].type).toBe("run.failed");
+});
+
+it("adds a failure terminal when a producer returns without one", async () => {
+  const { ndjsonStream } = await import("./http");
+  const response = ndjsonStream(() => {});
+  const lines = (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
+  expect(lines.map((event) => event.type)).toEqual(["run.failed"]);
+});
+
+it("never appends events after a terminal, including an attempted second terminal", async () => {
+  const { ndjsonStream } = await import("./http");
+  const response = ndjsonStream((emit) => { emit(failed); emit(failed); });
+  expect((await response.text()).trim().split("\n")).toHaveLength(1);
+});

@@ -42,7 +42,7 @@ describe("validatePlan", () => {
     const latePlace = shanghaiPlaces.find((item) => item.placeId === "starbucks-reserve-roastery")!;
     const latePlan = { ...plan, stops: [{ ...plan.stops[0], placeId: latePlace.placeId,
       name: latePlace.name, tags: latePlace.tags, startTime: "23:00", endTime: "24:00" }] };
-    expect(check({ plan: latePlan, setup: { ...setup, startTime: "22:00", endTime: "24:00" } }).valid).toBe(true);
+    expect(check({ plan: latePlan, setup: { ...setup, startTime: "21:00", endTime: "24:00" } }).valid).toBe(true);
   });
 
   it.each([
@@ -100,9 +100,9 @@ describe("validatePlan", () => {
 
   it("rejects a closed venue and admission after the cutoff", () => {
     const afterAdmission = check({ plan: { ...plan, stops: [{ ...plan.stops[0], startTime: "17:15", endTime: "17:45" }] } });
-    const monday = check({ setup: { ...setup, date: "2026-11-16" } });
+    const closed = check({ places: [{ ...place, weeklyOpeningHours: place.weeklyOpeningHours.map((group) => ({ ...group, intervals: [] })) }] });
     expect(afterAdmission.violations.map((item) => item.code)).toContain("PLACE_CLOSED");
-    expect(monday.violations.map((item) => item.code)).toContain("PLACE_CLOSED");
+    expect(closed.violations.map((item) => item.code)).toContain("PLACE_CLOSED");
   });
 
   it("rejects distance above either person's walking limit", () => {
@@ -144,7 +144,7 @@ describe("validatePlan", () => {
   });
 
   it("warns when source verification predates the trip by more than 90 days", () => {
-    const result = check({ setup: { ...setup, date: "2027-02-10" } });
+    const result = check({ setup: { ...setup, date: "2027-02-13" } });
     expect(result.valid).toBe(true);
     expect(result.warnings.map((item) => item.code)).toContain("STALE_PLACE_DATA");
   });

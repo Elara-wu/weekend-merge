@@ -40,3 +40,10 @@ describe("preference semantics", () => {
     expect(violatesAvoidedStop(["户外日晒"], [], false, "18:00")).toBe(false);
   });
 });
+
+it("literal-matches inherited dictionary names without invoking prototype methods", () => {
+  for (const value of ["toString", "constructor", "__proto__", "hasOwnProperty"]) {
+    expect(interestMatchesTags(value, [value])).toBe(true);
+    expect(expandedAvoidTags([value])).toEqual([value]);
+  }
+});

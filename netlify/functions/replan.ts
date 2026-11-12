@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { ItinerarySchema, ReplanRequestSchema, type AgentEvent, type Itinerary, type ReplanRequest } from "../../src/contracts/agent";
 import { analyzeConsensus } from "./agent/fallbacks/consensus";
+import { acceptsFeedback, feedbackDescriptions, parseReplanFeedback, type ReplanFeedback } from "./agent/replanFeedback";
+import { validateRequestDate } from "./agent/requestProtection";
+import { budgetEvidence, routeEvidence, validationEvidence } from "./agent/evidence";
 import { jsonError, ndjson, parseJsonRequest } from "./agent/http";
 import { calculateBudget } from "./agent/tools/budget";
 import type { CalculateBudgetInput, EstimateRouteOutput, Place } from "./agent/tools/contracts";
@@ -62,15 +65,16 @@ function schedule(request: ReplanRequest, stops: Itinerary["stops"], places: Pla
   return visit(0, minutes(request.setup.startTime)) ? result : undefined;
 }
 
-function replan(request: ReplanRequest, rejectedIndex: number, lockedIds: Set<string>): Itinerary | undefined {
+function replan(request: ReplanRequest, rejectedIndex: number, lockedIds: Set<string>, feedback: ReplanFeedback): Itinerary | undefined {
   const placeById = new Map(shanghaiPlaces.map((place) => [place.placeId, place]));
   const originals = request.plan.stops.map((stop) => placeById.get(stop.placeId));
   if (originals.some((place) => !place)) return undefined;
   const existingIds = new Set(request.plan.stops.map((stop) => stop.placeId));
   const existingStopIds = new Set(request.plan.stops.map((stop) => stop.id));
   const avoided = [...request.preferences.a.avoid, ...request.preferences.b.avoid];
-  const interests = [...new Set([...request.preferences.a.interests, ...request.preferences.b.interests])];
-  const shared = analyzeConsensus({ ...request, mode: "live" }).shared;
+  const interests = [...new Set([...request.preferences.a.interests, ...request.preferences.b.interests, ...feedback.desired])]
+    .filter((interest) => !feedback.negative.includes(interest));
+  const shared = analyzeConsensus({ ...request, mode: "live" }).shared.filter((interest) => !feedback.negative.includes(interest as typeof interests[number]));
   const neighbors = [originals[rejectedIndex - 1], originals[rejectedIndex + 1]].filter((place): place is Place => !!place);
   const score = (place: Place) => {
     const hits = interests.filter((interest) => interestMatchesTags(interest, place.tags)).length;
@@ -81,8 +85,16 @@ function replan(request: ReplanRequest, rejectedIndex: number, lockedIds: Set<st
     return sharedHits * 8 + hits * 4 - distance * 2 + suitability * 3 - place.priceRange.max * 0.02;
   };
   const alternatives = searchPlaces({ excludedTags: expandedAvoidTags(avoided), limit: 50 }).places
-    .filter((place) => !existingIds.has(place.placeId))
-    .sort((a, b) => score(b) - score(a) || a.placeId.localeCompare(b.placeId));
+    .filter((place) => !existingIds.has(place.placeId) && acceptsFeedback(place, originals[rejectedIndex]!, feedback))
+    .sort((a, b) => {
+      if (feedback.code === "TOO_EXPENSIVE" && a.priceRange.max !== b.priceRange.max) return a.priceRange.max - b.priceRange.max;
+      if (feedback.code === "TOO_MUCH_WALKING") {
+        const distance = (place: Place) => neighbors.reduce((sum, neighbor) => sum + routeFor([place, neighbor]).totalDistanceKm, 0);
+        const delta = distance(a) - distance(b);
+        if (delta) return delta;
+      }
+      return score(b) - score(a) || a.placeId.localeCompare(b.placeId);
+    });
   const affected = new Set([rejectedIndex - 1, rejectedIndex, rejectedIndex + 1]
     .filter((index) => index >= 0 && index < originals.length && !lockedIds.has(request.plan.stops[index].id)));
   for (const alternative of alternatives) {
@@ -105,6 +117,8 @@ function replan(request: ReplanRequest, rejectedIndex: number, lockedIds: Set<st
     const interestHits = venues.reduce((sum, place) => sum + interests.filter((interest) => interestMatchesTags(interest, place.tags)).length, 0);
     const plan = ItinerarySchema.parse({ ...request.plan,
       id: `${request.plan.id}-replan-${request.replanCount + 1}`, stops: scheduled,
+      title: `${alternative.name}与周末行程`,
+      reasons: [feedbackDescriptions[feedback.code], `行程包含${scheduled.map((stop) => stop.name).join("、")}`, "已重新核对时间、路线与预算"],
       summary: scheduled.map((stop) => stop.name).join("、"),
       matchScore: Math.max(0, Math.min(100, 60 + sharedHits * 12 + interestHits * 5)),
       totalCost: budget.total, totalDistanceKm: route.totalDistanceKm,
@@ -120,35 +134,50 @@ function replan(request: ReplanRequest, rejectedIndex: number, lockedIds: Set<st
   return undefined;
 }
 
-export async function handler(request: Request): Promise<Response> {
-  if (request.method !== "POST") return jsonError(405, "METHOD_NOT_ALLOWED", "Use POST to replan.");
-  const parsed = await parseJsonRequest(request, ReplanRequestSchema);
-  if ("response" in parsed) return parsed.response;
-  const body = parsed.data;
-  const stopIds = body.plan.stops.map((stop) => stop.id);
-  if (new Set(stopIds).size !== stopIds.length || !stopIds.includes(body.rejectedStopId) || body.lockedStopIds.some((id) => !stopIds.includes(id))) {
-    return jsonError(400, "INVALID_REQUEST", "Stop identities must be unique and refer to the current plan.");
-  }
-  const lockedIds = new Set([...body.lockedStopIds, ...body.plan.stops.filter((stop) => stop.locked).map((stop) => stop.id)]);
-  if (lockedIds.has(body.rejectedStopId)) return jsonError(409, "LOCKED_STOP_CONFLICT", "Unlock the rejected stop before replacing it.", "rejectedStopId");
-  try {
-    const started = Date.now();
-    const plan = replan(body, stopIds.indexOf(body.rejectedStopId), lockedIds);
-    if (!plan) return jsonError(422, "NO_VALID_REPLAN", "No local replacement satisfies the preserved stops and constraints.");
-    const runId = `replan-${createHash("sha256").update(JSON.stringify(body)).digest("hex").slice(0, 16)}`;
-    const at = new Date(started).toISOString();
-    const events: AgentEvent[] = [{ type: "run.started", runId, at }, { type: "step.started", step: "REPLAN", at }];
-    for (const tool of ["estimate_route", "calculate_budget", "validate_plan"] as const) {
-      events.push({ type: "tool.completed", tool, summary: { candidates: 1, verification: true }, durationMs: Math.max(0, Date.now() - started), source: "local" });
+export function createReplanHandler(dependencies: { now?: () => Date } = {}) {
+  return async function handler(request: Request): Promise<Response> {
+    if (request.method !== "POST") return jsonError(405, "METHOD_NOT_ALLOWED", "Use POST to replan.");
+    const parsed = await parseJsonRequest(request, ReplanRequestSchema);
+    if ("response" in parsed) return parsed.response;
+    const body = parsed.data;
+    const now = dependencies.now ?? (() => new Date());
+    const dateError = validateRequestDate(body.setup.date, now());
+    if (dateError) return dateError;
+    const feedback = parseReplanFeedback(body);
+    if (!feedback) return jsonError(400, "UNSUPPORTED_REPLAN_REASON", "Choose a supported replacement reason.", "reason");
+    const stopIds = body.plan.stops.map((stop) => stop.id);
+    if (new Set(stopIds).size !== stopIds.length || !stopIds.includes(body.rejectedStopId) || body.lockedStopIds.some((id) => !stopIds.includes(id))) {
+      return jsonError(400, "INVALID_REQUEST", "Stop identities must be unique and refer to the current plan.");
     }
-    events.push({ type: "step.started", step: "VERIFY", at }, { type: "plan.proposed", plan }, { type: "run.completed", result: {
-      runId, consensus: analyzeConsensus({ ...body, mode: "live" }), candidateIds: [plan.id],
-      diff: { replacedStopIds: [body.rejectedStopId], preservedStopIds: stopIds.filter((id) => id !== body.rejectedStopId), summary: "已替换否决地点，仅在需要时调整相邻未锁定地点的时间，并重新核对路线和预算。" },
-    } });
-    return ndjson(events);
-  } catch {
-    return jsonError(422, "NO_VALID_REPLAN", "No local replacement satisfies the preserved stops and constraints.");
-  }
+    const lockedIds = new Set([...body.lockedStopIds, ...body.plan.stops.filter((stop) => stop.locked).map((stop) => stop.id)]);
+    if (lockedIds.has(body.rejectedStopId)) return jsonError(409, "LOCKED_STOP_CONFLICT", "Unlock the rejected stop before replacing it.", "rejectedStopId");
+    try {
+      const started = now().getTime();
+      const plan = replan(body, stopIds.indexOf(body.rejectedStopId), lockedIds, feedback);
+      if (!plan) return jsonError(422, "NO_VALID_REPLAN", "No local replacement satisfies the preserved stops and constraints.");
+      const runId = `replan-${createHash("sha256").update(JSON.stringify(body)).digest("hex").slice(0, 16)}`;
+      const at = new Date(started).toISOString();
+      const events: AgentEvent[] = [{ type: "run.started", runId, at }, { type: "step.started", step: "REPLAN", at }];
+      const venues = plan.stops.map((stop) => shanghaiPlaces.find((place) => place.placeId === stop.placeId)!);
+      const route = routeFor(venues);
+      const validation = validatePlan({ plan, setup: body.setup, preferences: body.preferences, places: shanghaiPlaces,
+        originalPlan: body.plan, lockedStopIds: [...lockedIds],
+        walkingDistanceKm: route.legs.filter((leg) => leg.mode === "walking").reduce((sum, leg) => sum + leg.distanceKm, 0) });
+      for (const [tool, summary] of [
+        ["estimate_route", routeEvidence([route])],
+        ["calculate_budget", budgetEvidence([{ subtotal: plan.totalCost, buffer: 0, total: plan.totalCost,
+          withinBudget: plan.totalCost <= body.setup.budget, breakdown: {} }], body.setup.budget)],
+        ["validate_plan", validationEvidence([{ candidateId: plan.id, validation }])],
+      ] as const) events.push({ type: "tool.completed", tool, summary, durationMs: Math.max(0, now().getTime() - started), source: "local" });
+      events.push({ type: "step.started", step: "VERIFY", at }, { type: "plan.proposed", plan }, { type: "run.completed", result: {
+        runId, consensus: analyzeConsensus({ ...body, mode: "live" }), candidateIds: [plan.id],
+        diff: { replacedStopIds: [body.rejectedStopId], preservedStopIds: stopIds.filter((id) => id !== body.rejectedStopId), summary: "已替换否决地点，仅在需要时调整相邻未锁定地点的时间，并重新核对路线和预算。" },
+      } });
+      return ndjson(events);
+    } catch {
+      return jsonError(422, "NO_VALID_REPLAN", "No local replacement satisfies the preserved stops and constraints.");
+    }
+  };
 }
-
+export const handler = createReplanHandler();
 export default handler;

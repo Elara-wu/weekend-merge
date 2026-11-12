@@ -12,7 +12,7 @@ const request: PlanRequest = {
   setup: { city: "上海", date: "2026-11-14", startTime: "11:00", endTime: "18:00", budget: 300, startingArea: "徐汇滨江" },
   preferences: {
     a: { interests: ["展览"], pace: "轻松", walkingLimitKm: 3, indoorPreference: "室内优先", foodTags: [], budgetStyle: "平衡", avoid: [], wish: "private wish" },
-    b: { interests: ["展览", "书店"], pace: "平衡", walkingLimitKm: 5, indoorPreference: "均可", foodTags: [], budgetStyle: "平衡", avoid: [], wish: "" },
+    b: { interests: ["展览", "逛店"], pace: "平衡", walkingLimitKm: 5, indoorPreference: "均可", foodTags: [], budgetStyle: "平衡", avoid: [], wish: "" },
   },
 };
 const now = () => new Date("2026-11-11T00:00:00Z");
@@ -270,4 +270,51 @@ describe("controlled planning orchestrator", () => {
     expect(script.inputs).toHaveLength(0);
     expect(events.at(-1)).toMatchObject({ type: "run.failed", code: "INVALID_REQUEST" });
   });
+});
+
+it("publishes typed public weather/place/verification evidence and stale warnings without raw preferences", async () => {
+  const stale = places.map((place) => ({ ...place, lastVerifiedAt: "2026-01-01" }));
+  const tools = createAgentTools({ request, places: stale, weather: async () => weather });
+  const script = scripted([{ type: "tool_calls", calls: [weatherCall,
+    { id: "places", name: "search_places", args: { limit: 4 } },
+  ] }, final]);
+  const events = await runPlanningAgent(request, { places: stale, now, tools, model: script.model });
+  const evidence = (tool: string) => events.filter((event) => event.type === "tool.completed" && event.tool === tool).at(-1);
+  expect(evidence("get_weather")).toMatchObject({ summary: { source: "open-meteo", reference: "上海", interval: {
+    start: "2026-11-14T11:00:00+08:00", end: "2026-11-14T18:00:00+08:00",
+  }, hourlyCount: 1, temperatureMinC: 20, temperatureMaxC: 20, maxPrecipitationProbability: 0 } });
+  expect(evidence("search_places")).toMatchObject({ summary: { source: "curated-shanghai-catalog", matchedCount: 4,
+    selectedPlaces: expect.arrayContaining([{ placeId: "venue-0", name: "场馆0", lastVerifiedAt: "2026-01-01" }]),
+  } });
+  expect(evidence("estimate_route")).toMatchObject({ summary: { candidateCount: 3, estimated: true,
+    minDistanceKm: 0.1, maxDistanceKm: 0.19, minWalkingDistanceKm: 0.1, maxWalkingDistanceKm: 0.19,
+  } });
+  expect(evidence("calculate_budget")).toMatchObject({ summary: { candidateCount: 3, minTotal: 66, maxTotal: 110, budgetLimit: 300, withinBudgetCount: 3 } });
+  expect(evidence("validate_plan")).toMatchObject({ summary: { validCandidateCount: 3, invalidCandidateCount: 0,
+    candidates: expect.arrayContaining([expect.objectContaining({ candidateId: expect.any(String), violationCodes: [], warningCodes: ["STALE_PLACE_DATA"] })]),
+  } });
+  expect(JSON.stringify(events)).not.toMatch(/private wish|hidden reasoning|测试地址|sourceUrl|apiKey/);
+});
+
+it("stops event delivery immediately when an injected sink throws during tool completion", async () => {
+  let deliveries = 0;
+  let failed = false;
+  const deps = dependencies();
+  await expect(runPlanningAgent(request, { ...deps, model: scripted([weatherCall, final]).model,
+    onEvent: (event) => {
+      if (failed) throw new Error("second delivery");
+      deliveries++;
+      if (event.type === "tool.completed") { failed = true; throw new Error("sink disconnected"); }
+    },
+  })).rejects.toThrow("sink disconnected");
+  expect(deliveries).toBe(5);
+});
+
+it("does not publish arbitrary free-text avoidance labels or food tags", async () => {
+  const privateRequest = structuredClone(request);
+  privateRequest.preferences.a.avoid = ["private avoid"];
+  privateRequest.preferences.a.foodTags = ["private food"];
+  const events = await runPlanningAgent(privateRequest, dependencies());
+  expect(events.at(-1)?.type).toBe("run.completed");
+  expect(JSON.stringify(events)).not.toMatch(/private avoid|private food|private wish/);
 });

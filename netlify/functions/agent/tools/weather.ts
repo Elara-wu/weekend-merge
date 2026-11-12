@@ -48,9 +48,11 @@ function localDate(iso: string): string {
 export function createWeatherTool(dependencies: {
   fetch?: typeof fetch;
   now?: () => Date;
+  maxEntries?: number;
 } = {}): (input: WeatherInput) => Promise<WeatherOutput> {
-  const cache = new Map<string, { expiresAt: number; hourly: WeatherOutput["hourly"] }>();
-  const fetchWeather = dependencies.fetch ?? globalThis.fetch;
+  const cache = new Map<string, { expiresAt: number; hourly: Promise<WeatherOutput["hourly"]> }>();
+  const maxEntries = Math.max(1, Math.min(500, dependencies.maxEntries ?? 500));
+  const fetchWeather = dependencies.fetch ?? ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args));
   const now = dependencies.now ?? (() => new Date());
 
   return async (input) => {
@@ -61,6 +63,7 @@ export function createWeatherTool(dependencies: {
     const nowMs = now().getTime();
     let entry = cache.get(key);
 
+    for (const [cacheKey, cached] of cache) if (cached.expiresAt <= nowMs) cache.delete(cacheKey);
     if (!entry || entry.expiresAt <= nowMs) {
       const url = new URL("https://api.open-meteo.com/v1/forecast");
       url.searchParams.set("latitude", String(query.latitude));
@@ -70,28 +73,31 @@ export function createWeatherTool(dependencies: {
       url.searchParams.set("start_date", startDate);
       url.searchParams.set("end_date", endDate);
 
-      try {
-        const response = await fetchWeather(url.toString(), { signal: AbortSignal.timeout(4000) });
-        if (!response.ok) throw new Error(`Weather HTTP ${response.status}`);
-        const { hourly } = HourlyResponseSchema.parse(await response.json());
-        entry = {
-          expiresAt: nowMs + CACHE_TTL_MS,
-          hourly: hourly.time.map((time, index) => ({
+      const hourly = (async () => {
+        try {
+          const response = await fetchWeather(url.toString(), { signal: AbortSignal.timeout(4000) });
+          if (!response.ok) throw new Error(`Weather HTTP ${response.status}`);
+          const { hourly } = HourlyResponseSchema.parse(await response.json());
+          return hourly.time.map((time, index) => ({
             time,
             temperatureC: hourly.temperature_2m[index],
             precipitationProbability: hourly.precipitation_probability[index],
             weatherCode: hourly.weather_code[index],
-          })),
-        };
-        cache.set(key, entry);
-      } catch {
-        throw new AgentToolError("WEATHER_UNAVAILABLE", true);
-      }
+          }));
+        } catch {
+          throw new AgentToolError("WEATHER_UNAVAILABLE", true);
+        }
+      })();
+      entry = { expiresAt: nowMs + CACHE_TTL_MS, hourly };
+      if (cache.size >= maxEntries) cache.delete(cache.keys().next().value!);
+      cache.set(key, entry);
+      const inserted = entry;
+      void hourly.catch(() => { if (cache.get(key) === inserted) cache.delete(key); });
     }
 
     const startMs = Date.parse(query.start);
     const endMs = Date.parse(query.end);
-    const hourly = entry.hourly.filter(({ time }) => {
+    const hourly = (await entry.hourly).filter(({ time }) => {
       const hourMs = Date.parse(`${time}+08:00`);
       return hourMs >= startMs && hourMs < endMs;
     });

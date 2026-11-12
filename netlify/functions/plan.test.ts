@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import demoRequest from "../../tests/fixtures/plan-request.demo.json";
 import { AgentEventSchema, PlanRequestSchema } from "../../src/contracts/agent";
-import { createPlanHandler, handler } from "./plan";
+import { createPlanHandler } from "./plan";
+import { createPlanningLimiter } from "./agent/requestProtection";
+const now = () => new Date("2026-11-12T00:00:00Z");
+const handler = createPlanHandler({ now, limiter: createPlanningLimiter() });
 
 const url = "http://localhost/.netlify/functions/plan";
 const post = (body: unknown) => new Request(url, { method: "POST", body: JSON.stringify(body) });
@@ -45,7 +48,7 @@ describe("plan function", () => {
   it("visibly degrades a live no-key request to three verified local plans without network", async () => {
     const fetch = vi.fn(() => { throw new Error("Network must not be used"); });
     vi.stubGlobal("fetch", fetch);
-    const response = await createPlanHandler({ env: {} })(post({ ...demoRequest, mode: "live" }));
+    const response = await createPlanHandler({ now, limiter: createPlanningLimiter(), env: {} })(post({ ...demoRequest, mode: "live" }));
     expect(response.status).toBe(200);
     const events = (await response.text()).trim().split("\n").map((line) => AgentEventSchema.parse(JSON.parse(line)));
     expect(events).toContainEqual({ type: "run.degraded", reason: "MODEL_UNAVAILABLE", fallback: "rule-planner" });
@@ -57,7 +60,7 @@ describe("plan function", () => {
   it.each([{ GEMINI_API_KEY: "secret", GEMINI_MODEL: " " }, { GEMINI_API_KEY: " ", GEMINI_MODEL: "model" }])(
     "does not construct Gemini with incomplete configuration", async (env) => {
       let constructions = 0;
-      const response = await createPlanHandler({ env, createModel: () => { constructions += 1; throw new Error("Must not construct Gemini"); } })(post({ ...demoRequest, mode: "live" }));
+      const response = await createPlanHandler({ now, limiter: createPlanningLimiter(), env, createModel: () => { constructions += 1; throw new Error("Must not construct Gemini"); } })(post({ ...demoRequest, mode: "live" }));
       const text = await response.text();
       expect(constructions).toBe(0);
       expect(response.status).toBe(200);
@@ -68,7 +71,7 @@ describe("plan function", () => {
 
   it("uses the configured model with a server-owned registry", async () => {
     let turns = 0;
-    const response = await createPlanHandler({
+    const response = await createPlanHandler({ now, limiter: createPlanningLimiter(),
       env: { GEMINI_API_KEY: "test-key", GEMINI_MODEL: "test-model" },
       createModel: () => ({ next: async () => { turns += 1; throw new Error("Unavailable test model"); } }),
     })(post({ ...demoRequest, mode: "live", places: [], tools: { validate_plan: "fake" } }));
@@ -79,7 +82,7 @@ describe("plan function", () => {
   });
 
   it("degrades a model-construction failure without exposing configuration or the raw error", async () => {
-    const response = await createPlanHandler({ env: { GEMINI_API_KEY: "secret-key", GEMINI_MODEL: "test-model" },
+    const response = await createPlanHandler({ now, limiter: createPlanningLimiter(), env: { GEMINI_API_KEY: "secret-key", GEMINI_MODEL: "test-model" },
       createModel: () => { throw new Error("private SDK construction failure secret-key"); },
     })(post({ ...demoRequest, mode: "live" }));
     const text = await response.text();
@@ -90,8 +93,8 @@ describe("plan function", () => {
   });
 
   it("emits one failed terminal when the valid live request cannot produce verified rule plans", async () => {
-    const response = await createPlanHandler({ env: {} })(post({ ...demoRequest, mode: "live", setup: {
-      ...demoRequest.setup, startTime: "23:45", endTime: "24:00",
+    const response = await createPlanHandler({ now, limiter: createPlanningLimiter(), env: {} })(post({ ...demoRequest, mode: "live", setup: {
+      ...demoRequest.setup, startTime: "21:00", endTime: "24:00",
     } }));
     expect(response.status).toBe(200);
     const events = (await response.text()).trim().split("\n").map((line) => AgentEventSchema.parse(JSON.parse(line)));

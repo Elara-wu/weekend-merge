@@ -17,7 +17,8 @@ export function analyzeConsensus(request: PlanRequest): ConsensusSummary {
     conflicts.push(`步行上限不同：${a.walkingLimitKm} / ${b.walkingLimitKm} 公里`);
   }
 
-  const avoided = [...new Set([...a.avoid, ...b.avoid])];
+  const publicAvoidLabels = new Set(["排队", "拥挤", "辛辣", "酒吧", "长距离步行", "早起", "户外日晒"]);
+  const avoided = [...new Set([...a.avoid, ...b.avoid])].filter((label) => publicAvoidLabels.has(label));
   const constraints = [
     `总预算 ${request.setup.budget} 元`,
     `步行上限 ${effectiveWalkingLimitKm(request.preferences)} 公里`,

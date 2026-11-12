@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import demoRequest from "../../tests/fixtures/plan-request.demo.json";
 import { AgentEventSchema, ReplanRequestSchema, type AgentEvent, type ReplanRequest } from "../../src/contracts/agent";
 import { shanghaiPlaces } from "./agent/tools/places";
-import { handler } from "./replan";
+import { createReplanHandler } from "./replan";
+const handler = createReplanHandler({ now: () => new Date("2026-11-12T00:00:00Z") });
 
 const url = "http://localhost/.netlify/functions/replan";
 const post = (body: unknown) => new Request(url, { method: "POST", body: JSON.stringify(body) });
@@ -175,8 +176,8 @@ describe("local replan function", () => {
     const proposed = (await parseEvents(response)).find((event) => event.type === "plan.proposed")!;
     expect(proposed.plan.summary).not.toContain(input.plan.stops[1].name);
     expect(proposed.plan.summary).toContain(proposed.plan.stops[1].name);
-    // Only retained book city matches shared 逛店 (书店/阅读/文化): 60 + 12 + 5.
-    expect(proposed.plan.matchScore).toBe(77);
+    // Retained book city matches 逛店; the explicit 展览 feedback also contributes two itinerary tag matches.
+    expect(proposed.plan.matchScore).toBe(87);
     expect(proposed.plan.matchScore).toBeLessThanOrEqual(100);
     expect(Number.isFinite(proposed.plan.matchScore)).toBe(true);
     const again = (await parseEvents(await handler(post({ ...input, plan: { ...input.plan, matchScore: 99 } })))).find((event) => event.type === "plan.proposed")!;
@@ -184,7 +185,7 @@ describe("local replan function", () => {
     input.preferences.a.interests = ["电影"];
     input.preferences.b.interests = ["电影"];
     const noMatches = (await parseEvents(await handler(post(input)))).find((event) => event.type === "plan.proposed")!;
-    expect(noMatches.plan.matchScore).toBe(60);
+    expect(noMatches.plan.matchScore).toBe(70);
   });
 
   it("assigns a fresh replacement identity even when a preserved stop uses the generated name", async () => {
@@ -216,7 +217,7 @@ describe("local replan function", () => {
 
   it.each(["all-avoided", "no-time", "budget"])("returns structured 422 when no local replacement validates: %s", async (failure) => {
     const input = request();
-    if (failure === "all-avoided") input.preferences.a.avoid = [...new Set(shanghaiPlaces.flatMap((place) => place.tags))];
+    if (failure === "all-avoided") input.preferences.a.avoid = ["展览", "书店", "咖啡", "晚餐", "公园", "江景"];
     else if (failure === "no-time") {
       input.plan.stops[0].endTime = "13:44";
       input.plan.stops[2].startTime = "13:45";
@@ -226,4 +227,64 @@ describe("local replan function", () => {
     expect(response.status).toBe(422);
     expect(await response.json()).toMatchObject({ error: { code: "NO_VALID_REPLAN", retryable: false } });
   });
+});
+
+it.each([
+  ["不要再安排展览，想喝咖啡", "咖啡"],
+  ["想换成另一个展览", "展览"],
+])("applies explicit desired and negative interests: %s", async (reason, tag) => {
+  const input = request();
+  // Single rejected exhibition isolates feedback selection from preserved schedule constraints.
+  const venue = shanghaiPlaces.find((place) => place.placeId === "west-bund-museum")!;
+  input.plan.stops = [{ ...input.plan.stops[1], placeId: venue.placeId, name: venue.name, tags: venue.tags,
+    latitude: venue.latitude, longitude: venue.longitude, cost: venue.priceRange.max * 2 }];
+  input.lockedStopIds = [];
+  input.reason = reason;
+  input.plan.title = "过期标题";
+  input.plan.reasons = ["过期解释"];
+  const response = await handler(post(input));
+  expect(response.status).toBe(200);
+  const proposed = (await parseEvents(response)).find((event) => event.type === "plan.proposed")!;
+  expect(proposed.plan.stops[0].tags).toContain(tag);
+  expect(proposed.plan.stops[0].placeId).not.toBe(venue.placeId);
+  if (tag === "咖啡") expect(proposed.plan.stops[0].tags).not.toContain("展览");
+  expect(proposed.plan.title).not.toBe("过期标题");
+  expect(proposed.plan.reasons).not.toContain("过期解释");
+});
+
+it("rejects unsupported legacy free text instead of silently ignoring it", async () => {
+  const response = await handler(post({ ...request(), reason: "purple elephants in space" }));
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: { code: "UNSUPPORTED_REPLAN_REASON" } });
+});
+
+it.each([
+  ["TOO_CROWDED", (place: typeof shanghaiPlaces[number]) => !place.tags.some((tag) => ["排队", "拥挤"].includes(tag))],
+  ["PREFER_INDOOR", (place: typeof shanghaiPlaces[number]) => place.indoor],
+  ["PREFER_OUTDOOR", (place: typeof shanghaiPlaces[number]) => !place.indoor],
+  ["TOO_EXPENSIVE", (place: typeof shanghaiPlaces[number]) => place.priceRange.max === 0],
+])("applies structured feedback %s even with an opaque explanation", async (reasonCode, matches) => {
+  const input = request();
+  input.plan.stops = [input.plan.stops[1]];
+  input.lockedStopIds = [];
+  input.reason = "user feedback";
+  const response = await handler(post({ ...input, reasonCode }));
+  expect(response.status).toBe(200);
+  const proposed = (await parseEvents(response)).find((event) => event.type === "plan.proposed")!;
+  expect(matches(shanghaiPlaces.find((place) => place.placeId === proposed.plan.stops[0].placeId)!)).toBe(true);
+});
+
+it("prioritizes distance to the retained neighbor when walking feedback overrides exhibition interests", async () => {
+  const input = request();
+  const kept = input.plan.stops[2]; // Manner at Xuhui riverside
+  input.plan.stops = [input.plan.stops[1], { ...kept, startTime: "18:00", endTime: "18:45", locked: true }];
+  input.lockedStopIds = [kept.id];
+  input.reason = "too much walking, too far";
+  input.reasonCode = "TOO_MUCH_WALKING";
+  const response = await handler(post(input));
+  expect(response.status).toBe(200);
+  const proposed = (await parseEvents(response)).find((event) => event.type === "plan.proposed")!;
+  // West Bund Museum is about 0.4 km from Manner; all other unused venues are farther away.
+  expect(proposed.plan.stops[0].placeId).toBe("west-bund-museum");
+  expect(proposed.plan.stops[1]).toEqual(input.plan.stops[1]);
 });

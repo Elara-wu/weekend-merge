@@ -125,3 +125,46 @@ describe("createWeatherTool", () => {
     await expect(weather(weatherInput)).rejects.toMatchObject({ code: "WEATHER_UNAVAILABLE", retryable: true });
   });
 });
+
+it("bounds cached scopes by evicting the oldest when capacity is reached", async () => {
+  const fetchStub = vi.fn().mockImplementation(async () => Response.json(response));
+  const weather = createWeatherTool({ fetch: fetchStub, maxEntries: 2 });
+  await weather(weatherInput);
+  await weather({ ...weatherInput, latitude: 32 });
+  await weather({ ...weatherInput, latitude: 33 });
+  await weather(weatherInput);
+  expect(fetchStub).toHaveBeenCalledTimes(4);
+});
+
+it("coalesces concurrent requests for identical scopes", async () => {
+  let resolve!: (response: Response) => void;
+  const fetchStub = vi.fn(() => new Promise<Response>((done) => { resolve = done; }));
+  const weather = createWeatherTool({ fetch: fetchStub });
+  const first = weather(weatherInput);
+  const second = weather(weatherInput);
+  resolve(Response.json(response));
+  await Promise.all([first, second]);
+  expect(fetchStub).toHaveBeenCalledTimes(1);
+});
+
+it("reuses module-scope weather across production registries and refetches at expiry", async () => {
+  const { createAgentTools, weatherScopeForRequest } = await import("./registry");
+  const { PlanRequestSchema } = await import("../../../../src/contracts/agent");
+  const fixture = (await import("../../../../tests/fixtures/plan-request.demo.json")).default;
+  const fetchStub = vi.fn().mockImplementation(async () => Response.json(response));
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-12T00:00:00Z"));
+  vi.stubGlobal("fetch", fetchStub);
+  try {
+    const request = PlanRequestSchema.parse(fixture);
+    const first = createAgentTools({ request });
+    const second = createAgentTools({ request });
+    const scope = weatherScopeForRequest(request);
+    await first.get_weather(scope);
+    await second.get_weather(scope);
+    expect(fetchStub).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(new Date("2026-11-12T00:30:00Z"));
+    await second.get_weather(scope);
+    expect(fetchStub).toHaveBeenCalledTimes(2);
+  } finally { vi.useRealTimers(); vi.unstubAllGlobals(); }
+});
