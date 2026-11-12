@@ -6,5 +6,6 @@ dist/
 coverage/
 output/
 .playwright-cli/
+.worktrees/
 *.tsbuildinfo
 .DS_Store

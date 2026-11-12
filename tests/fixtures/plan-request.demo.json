@@ -1,0 +1,20 @@
+{
+  "sessionId": "weekend-demo",
+  "mode": "demo",
+  "setup": {
+    "city": "上海", "date": "2026-11-14", "startTime": "13:00", "endTime": "20:00",
+    "budget": 300, "startingArea": "徐汇滨江"
+  },
+  "preferences": {
+    "a": {
+      "interests": ["展览", "咖啡"], "pace": "轻松", "walkingLimitKm": 3,
+      "indoorPreference": "室内优先", "foodTags": ["本帮菜"], "budgetStyle": "平衡",
+      "avoid": ["排队"], "wish": "想看一个展览，再找个地方休息"
+    },
+    "b": {
+      "interests": ["展览", "咖啡", "夜景"], "pace": "平衡", "walkingLimitKm": 5,
+      "indoorPreference": "均可", "foodTags": [], "budgetStyle": "省钱",
+      "avoid": ["拥挤"], "wish": "想留一点时间看城市风景"
+    }
+  }
+}

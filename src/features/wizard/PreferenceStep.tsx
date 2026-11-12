@@ -6,7 +6,6 @@ import {
   Coffee,
   Footprints,
   Leaf,
-  Sun,
   Film,
   Users,
   Sparkles,
@@ -18,30 +17,19 @@ import {
   MoveDown,
 } from "lucide-react";
 import {
+  InterestSchema,
   PersonPreferencesSchema,
   type PersonPreferences,
   type PlanSetup,
 } from "@/contracts/agent";
 import { dateLabel, Modal, Tag } from "@/components/Ui";
 
-const interests = [
-  "展览",
-  "咖啡",
-  "城市散步",
-  "自然",
-  "公园",
-  "电影",
-  "桌游",
-  "夜景",
-  "逛店",
-  "美食",
-];
+const interests = InterestSchema.options;
 const icons = [
   BookOpen,
   Coffee,
   Footprints,
   Leaf,
-  Sun,
   Film,
   Users,
   Sparkles,
@@ -74,14 +62,21 @@ export function PreferenceStep({
     },
   );
   const [backConfirm, setBackConfirm] = useState(false);
-  const toggle = (key: "interests" | "foodTags" | "avoid", value: string) =>
+  const toggleInterest = (value: PersonPreferences["interests"][number]) =>
+    setDraft((old) => ({
+      ...old,
+      interests: old.interests.includes(value)
+        ? old.interests.filter((item) => item !== value)
+        : old.interests.length >= 5
+          ? old.interests
+          : [...old.interests, value],
+    }));
+  const toggleTextPreference = (key: "foodTags" | "avoid", value: string) =>
     setDraft((old) => ({
       ...old,
       [key]: old[key].includes(value)
-        ? old[key].filter((x) => x !== value)
-        : key === "interests" && old.interests.length >= 5
-          ? old[key]
-          : [...old[key], value],
+        ? old[key].filter((item) => item !== value)
+        : [...old[key], value],
     }));
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -141,7 +136,7 @@ export function PreferenceStep({
                     className="sr-only"
                     type="checkbox"
                     checked={draft.interests.includes(name)}
-                    onChange={() => toggle("interests", name)}
+                    onChange={() => toggleInterest(name)}
                     aria-label={name}
                   />
                   <span className="interest-icon">
@@ -251,7 +246,7 @@ export function PreferenceStep({
                   className="sr-only"
                   type="checkbox"
                   checked={draft.foodTags.includes(value)}
-                  onChange={() => toggle("foodTags", value)}
+                  onChange={() => toggleTextPreference("foodTags", value)}
                 />
                 {value}
               </label>
@@ -278,7 +273,7 @@ export function PreferenceStep({
                   className="sr-only"
                   type="checkbox"
                   checked={draft.avoid.includes(value)}
-                  onChange={() => toggle("avoid", value)}
+                  onChange={() => toggleTextPreference("avoid", value)}
                 />
                 {value}
               </label>
