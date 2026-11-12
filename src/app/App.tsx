@@ -1,87 +1,329 @@
-import { EyeOff, RotateCcw, Users } from "lucide-react";
-
+import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Check,
+  CheckCheck,
+  CircleHelp,
+  EyeOff,
+  Leaf,
+  LockKeyhole,
+  ShieldCheck,
+} from "lucide-react";
 import { createDemoRun } from "@/demo/demoRun";
 import { PreferenceStep } from "@/features/wizard/PreferenceStep";
 import { SetupStep } from "@/features/wizard/SetupStep";
+import { ConsensusStep } from "@/features/wizard/ConsensusStep";
 import { PlanningWorkbench } from "@/features/workbench/PlanningWorkbench";
+import { FinalItinerary } from "@/features/final/FinalItinerary";
+import { decodeShare } from "@/features/final/share";
 import { usePlanningStore } from "@/state/usePlanningStore";
-
-function AppHeader() {
-  const reset = usePlanningStore((state) => state.reset);
-  return (
-    <header className="app-header">
-      <div className="brand-lockup">
-        <div className="brand-mark" aria-hidden="true"><span>A</span><span>B</span></div>
-        <div><strong>Weekend Merge</strong><span>周末共识局</span></div>
-      </div>
-      <div className="header-actions">
-        <span className="demo-badge">Demo data</span>
-        <button className="icon-button" onClick={reset} title="重新开始" type="button">
-          <RotateCcw size={17} />
-        </button>
-      </div>
-    </header>
-  );
-}
-
-function HandoffScreen() {
-  const handoffToB = usePlanningStore((state) => state.handoffToB);
-  return (
-    <section className="handoff-screen">
-      <div className="privacy-seal"><EyeOff size={28} /></div>
-      <div className="step-kicker">隐私交接</div>
-      <h1>A 的答案已经收好</h1>
-      <p>屏幕不会显示任何偏好摘要。把设备交给 B，再继续填写。</p>
-      <button className="primary-action" onClick={handoffToB} type="button">我是 B，开始填写</button>
-    </section>
-  );
-}
-
-function ConsensusScreen() {
-  const openWorkbench = usePlanningStore((state) => state.openWorkbench);
-  return (
-    <section className="consensus-screen">
-      <div className="step-kicker">共识 03 / 03</div>
-      <h1>你们没有完全相同，但有足够多的交集</h1>
-      <div className="consensus-bands">
-        <section className="consensus-band shared">
-          <span>共同想要</span><strong>展览 · 咖啡 · 慢节奏</strong>
-        </section>
-        <section className="consensus-band conflict">
-          <span>需要折中</span><strong>城市散步 vs 少走路 · 夜景 vs 不想晚归</strong>
-        </section>
-        <section className="consensus-band fixed">
-          <span>不能违反</span><strong>¥300 · 步行 ≤ 3km · 避开长时间排队</strong>
-        </section>
-      </div>
-      <div className="consensus-action">
-        <Users size={19} />
-        <p>Agent 会调用天气、地点、路线和预算工具，生成三个可以比较的方向。</p>
-        <button className="primary-action" onClick={openWorkbench} type="button">开始规划</button>
-      </div>
-    </section>
-  );
-}
+import { Modal, nextWeekend, Tag } from "@/components/Ui";
 
 export function App() {
-  const stage = usePlanningStore((state) => state.stage);
-  const saveSetup = usePlanningStore((state) => state.saveSetup);
-  const savePreferences = usePlanningStore((state) => state.savePreferences);
-
+  const store = usePlanningStore();
+  const { stage, setup, preferences } = store;
+  const [modal, setModal] = useState<"help" | "reset" | null>(null);
+  const [runNumber, setRunNumber] = useState(0);
+  const events = useMemo(
+    () => createDemoRun({ runId: `portfolio-demo-${runNumber}` }),
+    [runNumber],
+  );
+  const [visibleEvents, setVisibleEvents] = useState(events.length);
+  const [shared, setShared] = useState<ReturnType<typeof decodeShare>>(null);
+  const [shareError, setShareError] = useState("");
+  useEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [stage]);
+  useEffect(() => {
+    const read = () => {
+      try {
+        setShared(decodeShare(location.hash));
+        setShareError("");
+      } catch (e) {
+        setShared(null);
+        setShareError(e instanceof Error ? e.message : "分享快照无法读取。");
+      }
+    };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
+  useEffect(() => {
+    if (stage !== "workbench" || visibleEvents >= events.length) return;
+    const timer = setTimeout(() => setVisibleEvents((n) => n + 1), 280);
+    return () => clearTimeout(timer);
+  }, [stage, visibleEvents, events.length]);
+  function plan() {
+    store.openWorkbench();
+    setRunNumber((n) => n + 1);
+    setVisibleEvents(1);
+  }
+  function demo() {
+    store.reset();
+    store.saveSetup({
+      city: "上海",
+      date: nextWeekend(),
+      startTime: "13:00",
+      endTime: "21:00",
+      budget: 300,
+      startingArea: "静安寺",
+    });
+    store.savePreferences("a", {
+      interests: ["展览", "咖啡", "美食"],
+      pace: "轻松",
+      walkingLimitKm: 3,
+      indoorPreference: "室内优先",
+      foodTags: ["清淡"],
+      budgetStyle: "平衡",
+      avoid: ["长距离步行"],
+      wish: "想看一个安静的展览，再慢慢喝杯咖啡。",
+    });
+    store.savePreferences("b", {
+      interests: ["城市散步", "夜景", "咖啡", "美食"],
+      pace: "平衡",
+      walkingLimitKm: 5,
+      indoorPreference: "均可",
+      foodTags: ["本帮菜"],
+      budgetStyle: "平衡",
+      avoid: ["排队"],
+      wish: "想看看街道和夜景，不用赶时间。",
+    });
+    plan();
+  }
+  const current =
+    stage === "setup"
+      ? 0
+      : ["person-a", "person-b", "handoff"].includes(stage)
+        ? 1
+        : stage === "consensus"
+          ? 2
+          : stage === "workbench"
+            ? 3
+            : 4;
   return (
     <div className="app-shell">
-      <AppHeader />
-      {stage === "setup" && <SetupStep onSubmit={saveSetup} />}
-      {stage === "person-a" && (
-        <PreferenceStep person="A" onSubmit={(preferences) => savePreferences("a", preferences)} />
+      <header className="header">
+        <button
+          className="brand"
+          aria-label="Weekend Merge 周末共识局"
+          onClick={() => setModal("reset")}
+        >
+          <span className="brand-mark">
+            <Leaf size={21} />
+            <span />
+          </span>
+          <span>
+            weekend<span className="brand-light">merge</span>
+            <small>周末共识局</small>
+          </span>
+        </button>
+        <nav className="top-nav" aria-label="应用导航">
+          <span className="nav-active">我们的周末</span>
+          <button onClick={() => setModal("help")}>
+            它如何帮你 <ArrowUpRight size={14} />
+          </button>
+        </nav>
+        <div className="header-right">
+          <span className="demo-pill">
+            <span />
+            演示模式
+          </span>
+          <button
+            className="icon-button"
+            aria-label="使用帮助"
+            onClick={() => setModal("help")}
+          >
+            <CircleHelp size={20} />
+          </button>
+          <div className="avatar-pair">
+            <span>A</span>
+            <span>B</span>
+          </div>
+        </div>
+      </header>
+      {shareError ? (
+        <main className="handoff">
+          <h1>这份分享暂时打不开</h1>
+          <p role="alert">{shareError}</p>
+          <button
+            className="button primary"
+            onClick={() => {
+              location.hash = "";
+              store.reset();
+            }}
+          >
+            创建自己的周末计划
+          </button>
+        </main>
+      ) : shared ? (
+        <FinalItinerary plan={shared.plan} setup={shared.setup} readOnly />
+      ) : (
+        <>
+          <nav
+            className={`stepbar ${stage === "workbench" ? "compact" : ""}`}
+            aria-label="规划进度"
+          >
+            <div className="stepbar-inner">
+              {[
+                "创建计划",
+                "各自的期待",
+                "共识揭晓",
+                "一起选方案",
+                "出发吧",
+              ].map((name, i) => (
+                <div className="step-group" key={name}>
+                  <div
+                    className={`step ${i === current ? "current" : ""} ${i < current ? "done" : ""}`}
+                    aria-current={i === current ? "step" : undefined}
+                  >
+                    <span>
+                      {i < current ? (
+                        <Check size={12} />
+                      ) : (
+                        String(i + 1).padStart(2, "0")
+                      )}
+                    </span>
+                    <label>{name}</label>
+                  </div>
+                  {i < 4 && (
+                    <div className={`step-line ${i < current ? "done" : ""}`} />
+                  )}
+                </div>
+              ))}
+              <span className="saved-indicator">
+                <CheckCheck size={14} />
+                自动保存在此设备
+              </span>
+            </div>
+          </nav>
+          {stage === "setup" && (
+            <SetupStep
+              onSubmit={store.saveSetup}
+              onDemo={demo}
+              initial={setup}
+            />
+          )}{" "}
+          {stage === "person-a" && (
+            <PreferenceStep
+              key="a"
+              person="A"
+              setup={setup}
+              initial={preferences.a}
+              onSubmit={(p) => store.savePreferences("a", p)}
+              onBack={() => store.goTo("setup")}
+            />
+          )}{" "}
+          {stage === "handoff" && (
+            <main className="handoff">
+              <div className="handoff-symbol">
+                <span>A</span>
+                <span>
+                  <LockKeyhole size={26} />
+                </span>
+                <span>B</span>
+              </div>
+              <Tag>
+                <ShieldCheck size={14} />A 的偏好已保存
+              </Tag>
+              <h1>现在，把设备交给 B。</h1>
+              <p>
+                A 的答案已经收好。
+                <br />
+                接下来，留一点空间给另一份期待。
+              </p>
+              <button className="button primary" onClick={store.handoffToB}>
+                我是 B，开始填写 <ArrowRight size={17} />
+              </button>
+              <small>
+                <EyeOff size={14} />
+                不展示 A 的答案，也不预设 B 的选择
+              </small>
+            </main>
+          )}{" "}
+          {stage === "person-b" && (
+            <PreferenceStep
+              key="b"
+              person="B"
+              setup={setup}
+              initial={preferences.b}
+              onSubmit={(p) => store.savePreferences("b", p)}
+              onBack={() => store.goTo("person-a")}
+            />
+          )}{" "}
+          {stage === "consensus" && <ConsensusStep onPlan={plan} />}{" "}
+          {stage === "workbench" && (
+            <PlanningWorkbench
+              events={events.slice(0, visibleEvents)}
+              onRetry={plan}
+              onEdit={() => setModal("reset")}
+            />
+          )}{" "}
+          {stage === "final" && store.finalPlan && (
+            <FinalItinerary
+              plan={store.finalPlan}
+              setup={setup}
+              onBack={() => store.goTo("workbench")}
+            />
+          )}
+        </>
       )}
-      {stage === "handoff" && <HandoffScreen />}
-      {stage === "person-b" && (
-        <PreferenceStep person="B" onSubmit={(preferences) => savePreferences("b", preferences)} />
-      )}
-      {stage === "consensus" && <ConsensusScreen />}
-      {stage === "workbench" && (
-        <PlanningWorkbench events={createDemoRun({ runId: "portfolio-demo" })} />
+      <footer className="footer">
+        <span>
+          weekendmerge <span>/ 让“都可以”变成“一起去”。</span>
+        </span>
+        <span>MADE FOR TWO, NOT FOR COMPROMISE.</span>
+      </footer>
+      {modal && (
+        <Modal
+          title={
+            modal === "help" ? "少一点纠结，多一点一起。" : "重新准备一个周末？"
+          }
+          onClose={() => setModal(null)}
+        >
+          {modal === "help" ? (
+            <>
+              <p>分别写下期待，发现共同偏好，再从三个提案里选出喜欢的一份。</p>
+              <ol>
+                <li>设置时间、预算和碰面商圈。</li>
+                <li>A / B 独立填写，通过遮罩完成设备交接。</li>
+                <li>查看共识、地图和 Agent 工具结果。</li>
+                <li>锁定喜欢的安排，最多替换两站。</li>
+                <li>确认行程，导出 PNG 或只读分享链接。</li>
+              </ol>
+              <div className="help-note">
+                当前使用仓库中的演示 Agent
+                事件；地点、天气与费用并未实时核验。偏好仅保存在当前浏览器，私密界面不等同于加密。
+              </div>
+              <button className="button primary" onClick={() => setModal(null)}>
+                明白了
+              </button>
+            </>
+          ) : (
+            <>
+              <p>
+                回到创建页后可修改条件；提交新条件将清空当前的锁定、点赞和替换记录。
+              </p>
+              <button
+                className="button primary"
+                onClick={() => {
+                  location.hash = "";
+                  store.goTo("setup");
+                  setModal(null);
+                }}
+              >
+                回到创建计划 <ArrowRight size={16} />
+              </button>
+              <button
+                className="button secondary"
+                onClick={() => setModal(null)}
+              >
+                保留当前计划
+              </button>
+            </>
+          )}
+        </Modal>
       )}
     </div>
   );

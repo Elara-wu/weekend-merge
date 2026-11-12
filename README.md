@@ -1,13 +1,20 @@
 # Weekend Merge / 周末共识局
 
-一个面向两人周末决策的可观察规划工具。双方填写兴趣、预算和避让项，服务端可生成三套上海行程；否决站点后可在保留锁定站点的前提下局部重排。
+一个面向两人周末决策的可观察 AI Agent。双方分别填写兴趣、预算和雷区，系统通过天气、地点、路线与预算工具生成三套折中方案；否决某一站后，只重新规划受影响区段。
 
 ## 当前可用
 
-- 前端提供双人偏好向导、隐私交接、三个演示候选方案和规划工作台，刷新后恢复当前步骤。浏览器工作台目前使用 `createDemoRun()` 展示 fixture，尚未连接 HTTP Agent。
-- `POST /.netlify/functions/plan` 接受完整请求。`mode: "demo"` 返回固定展示事件；`mode: "live"` 运行受控 Agent。未配置 Gemini 时，实时请求会发出 `run.degraded` 并使用确定性规则方案。
-- `POST /.netlify/functions/replan` 在本地替换一个被否决的目录地点，保留锁定站点，返回一个候选方案和差异。可信客户端按 `replanCount` 约定最多执行两轮；无数据库的服务端不记录会话轮次。
-- 两个端点成功时均返回经过共享 Schema 校验的 NDJSON 事件；`plan` 逐行推送进度，`replan` 返回有界的缓冲响应。请求错误返回结构化 JSON。
+- 创建上海周末计划。
+- A / B 分别填写偏好，中间经过隐私交接遮罩。
+- 展示共同偏好、冲突和硬约束。
+- 在规划工作台比较三个候选方案。
+- 查看天气、地点、路线和预算工具的执行证据。
+- 切换方案，点赞、锁定、按理由局部替换，并保存协商状态。
+- 最终行程、PNG 长图和不含个人偏好的只读分享。
+- 浏览器刷新后恢复当前步骤。
+- `POST /.netlify/functions/plan` 支持演示模式和受控实时 Agent；未配置 Gemini 时会显式降级为确定性规则方案。
+- `POST /.netlify/functions/replan` 支持保留锁定站点的局部重排，并返回变更差异。
+- 两个端点均使用共享 Schema 校验 NDJSON 事件；`plan` 逐行推送进度，`replan` 返回有界响应。
 
 ## 快速开始
 
@@ -59,6 +66,7 @@ npm run build
 - [架构与降级路径](docs/ARCHITECTURE.md)
 - [本地 API 演示](docs/DEMO.md)
 - [产品需求与系统设计](docs/PRD.md)
+- [前端设计、模块入口与接入边界](docs/FRONTEND.md)
 - [Agent 事件契约](src/contracts/agent.ts)
 
 ## 项目状态
@@ -69,6 +77,9 @@ npm run build
 - [x] 测试、构建和 CI
 - [x] 真实 Agent 工具链与规则降级
 - [x] 局部重新规划 API
+- [x] 响应式工作台与手机详情/轨迹切换
+- [x] 锁定保护、局部替换演示与差异显示
+- [x] 最终分享页与 PNG 长图
 - [ ] 浏览器工作台接入实时 Agent 与重排 API
-- [ ] Leaflet 地图与移动端抽屉
-- [ ] 最终分享页与在线 Demo
+- [ ] Leaflet 真实地图
+- [ ] 在线部署
