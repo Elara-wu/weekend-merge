@@ -38,6 +38,17 @@ npm run build
 
 部署需提供 Node.js 22+、Netlify Functions，以及可选的服务端 Gemini 配置。`netlify.toml` 已设置构建命令和 Node 版本。调用天气工具时依赖 Open-Meteo 的可用性；服务配额和使用政策需按实际部署核对。
 
+## Netlify 部署
+
+从 GitHub 导入 `wml516518/weekend-merge`，生产分支选择 `main`。仓库中的 `netlify.toml` 已固定以下设置：
+
+- 构建命令：`npm run build`
+- 发布目录：`dist`
+- Functions 目录：`netlify/functions`
+- Node.js 版本：`22`
+
+`GEMINI_API_KEY` 与 `GEMINI_MODEL` 只应配置为 Netlify Functions 的服务端环境变量，不能使用 `VITE_` 前缀。没有密钥时生产站仍可运行，并会明确降级到确定性规则规划；添加密钥后再启用 Gemini Function Calling。基础响应安全头由 `netlify.toml` 统一设置，CSP 将在地图瓦片来源确定后单独收紧。
+
 ## 接口与数据边界
 
 | 路径 | 职责 |
