@@ -16,27 +16,52 @@ const aliases: Record<Interest, string> = {
   "自然": "自然|nature|park", "电影": "电影|movie|cinema", "桌游": "桌游|board game",
   "夜景": "夜景|night view", "逛店": "逛店|书店|bookstore|shopping", "美食": "美食|晚餐|food|dinner",
 };
+const clauseSeparator = /[，,。.;；!?！？]|\b(?:but|instead)\b/;
+const negativePrefix = /(?:不要|不想|不再|别|拒绝|\b(?:avoid|no|not|don't|do not|without)\b)[^，,。;；]*$/i;
+
+function parseIndoorPreference(text: string): boolean | undefined {
+  const votes = new Set<boolean>();
+  const patterns: Array<{ expression: RegExp; indoor: boolean }> = [
+    { expression: /室内|\bindoors?\b/i, indoor: true },
+    { expression: /户外|室外|\boutdoors?\b/i, indoor: false },
+    { expression: /下雨|雨天|\brain(?:y|ing)?\b/i, indoor: true },
+  ];
+
+  for (const clause of text.split(clauseSeparator)) {
+    for (const pattern of patterns) {
+      const match = pattern.expression.exec(clause);
+      if (!match) continue;
+      const negated = negativePrefix.test(clause.slice(0, match.index));
+      // Negating rain does not imply an outdoor preference; negating a space type does.
+      if (negated && pattern.indoor && /下雨|雨天|\brain/i.test(match[0])) continue;
+      votes.add(negated ? !pattern.indoor : pattern.indoor);
+    }
+  }
+
+  return votes.size === 1 ? [...votes][0] : undefined;
+}
 
 // Bounded keyword protocol, deliberately not a general natural-language interpreter.
 export function parseReplanFeedback(request: Pick<ReplanRequest, "reason" | "reasonCode">): ReplanFeedback | undefined {
   const text = request.reason.toLowerCase();
   const desired: Interest[] = [];
   const negative: Interest[] = [];
-  for (const clause of text.split(/[，,。.;；!?！？]|\b(?:but|instead)\b/)) {
+  for (const clause of text.split(clauseSeparator)) {
     for (const interest of InterestSchema.options) {
       const tokens = aliases[interest].split("|").map((alias) => /^[a-z]/.test(alias) ? `\\b${alias}\\b` : alias);
       const match = new RegExp(tokens.join("|"), "i").exec(clause);
       if (!match) continue;
       const prefix = clause.slice(0, match.index);
-      const isNegative = /(?:不要|不想|不再|别|拒绝|\b(?:avoid|no|not|don't|do not|without)\b)[^，,。;；]*$/i.test(prefix);
+      const isNegative = negativePrefix.test(prefix);
       (isNegative ? negative : desired).push(interest);
     }
   }
   const crowded = /排队|拥挤|人多|\b(?:crowd(?:ed|s|ing)?|queue(?:s|ing)?)\b/.test(text);
   const expensive = /贵|省钱|预算|\b(?:expensive|budget|cheaper)\b/.test(text);
   const walking = /走路|步行|太远|远了|\b(?:walking|walk too|far)\b/.test(text);
-  const indoor = /室内|下雨|雨天|\b(?:indoors?|rain(?:y|ing)?)\b/.test(text);
-  const outdoor = /户外|室外|\b(?:outdoors?)\b/.test(text);
+  const indoorPreference = parseIndoorPreference(text);
+  const indoor = indoorPreference === true;
+  const outdoor = indoorPreference === false;
   const sameCategory = /另一个|另一家|换一个|同类|同类别|\b(?:another|same category)\b/.test(text);
   const code = request.reasonCode ?? (crowded ? "TOO_CROWDED" : expensive ? "TOO_EXPENSIVE" : walking ? "TOO_MUCH_WALKING" :
     indoor ? "PREFER_INDOOR" : outdoor ? "PREFER_OUTDOOR" : desired.length || negative.length ? "CHANGE_ACTIVITY" :

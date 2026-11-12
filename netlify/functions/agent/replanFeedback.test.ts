@@ -20,6 +20,13 @@ describe("deterministic replan feedback protocol", () => {
     expect(parseReplanFeedback({ reason: "I want a unique experience" })).toBeUndefined();
     expect(parseReplanFeedback({ reason: "notebook memories" })).toBeUndefined();
   });
+
+  it.each([
+    ["不要室内，想去户外", "PREFER_OUTDOOR", false],
+    ["不要户外，想去室内", "PREFER_INDOOR", true],
+  ])("respects negated space preferences in %s", (reason, code, indoor) => {
+    expect(parseReplanFeedback({ reason })).toMatchObject({ code, indoor });
+  });
 });
 
 it.each(["training schedule", "crowdfunding project", "outdoorsman biography", "coffeemaker repair"])(
