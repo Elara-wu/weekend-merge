@@ -44,5 +44,4 @@ export function createPlanHandler(dependencies: {
   };
 }
 
-export const handler = createPlanHandler();
-export default handler;
+export default createPlanHandler();

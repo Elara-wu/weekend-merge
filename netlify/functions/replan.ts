@@ -179,5 +179,4 @@ export function createReplanHandler(dependencies: { now?: () => Date } = {}) {
     }
   };
 }
-export const handler = createReplanHandler();
-export default handler;
+export default createReplanHandler();
