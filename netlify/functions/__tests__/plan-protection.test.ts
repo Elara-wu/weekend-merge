@@ -22,7 +22,7 @@ describe("plan public protection and streaming", () => {
   it("blocks the sixth shared warm-instance request before model construction or weather", async () => {
     let constructions = 0;
     let turns = 0;
-    const options = { now, env: { GEMINI_API_KEY: "fake", GEMINI_MODEL: "fake" }, createModel: () => {
+    const options = { now, env: { DEEPSEEK_API_KEY: "fake", DEEPSEEK_MODEL: "fake" }, createModel: () => {
       constructions++;
       return { next: async () => { turns++; throw new Error("offline"); } };
     } };
@@ -44,7 +44,7 @@ describe("plan public protection and streaming", () => {
   it("returns early progress while the model promise is still unresolved", async () => {
     let resolve!: (value: unknown) => void;
     const deferred = new Promise<unknown>((done) => { resolve = done; });
-    const pending = createPlanHandler({ now, env: { GEMINI_API_KEY: "fake", GEMINI_MODEL: "fake" },
+    const pending = createPlanHandler({ now, env: { DEEPSEEK_API_KEY: "fake", DEEPSEEK_MODEL: "fake" },
       createModel: () => ({ next: async () => deferred }),
     })(post({ ...fixture, mode: "live", sessionId: "deferred-model" }));
     const response = await Promise.race([pending, new Promise<null>((done) => setTimeout(() => done(null), 100))]);
@@ -91,7 +91,7 @@ it.each([
 it("validates static fields before consulting the injected limiter or constructing the model", async () => {
   let attempts = 0;
   const response = await createPlanHandler({ now, limiter: { allow() { attempts++; return false; } },
-    env: { GEMINI_API_KEY: "fake", GEMINI_MODEL: "fake" }, createModel() { throw new Error("must not construct"); },
+    env: { DEEPSEEK_API_KEY: "fake", DEEPSEEK_MODEL: "fake" }, createModel() { throw new Error("must not construct"); },
   })(post({ ...fixture, mode: "live", setup: { ...fixture.setup, endTime: "12:00" } }));
   expect(response.status).toBe(400);
   expect(attempts).toBe(0);

@@ -485,12 +485,12 @@ type AgentEvent =
 - UI 图标：Lucide。
 - 数据校验：Zod。
 - 服务端：Netlify Functions + TypeScript。
-- Agent：Gemini Developer API Function Calling，模型 ID 通过 `GEMINI_MODEL` 配置。
+- Agent：DeepSeek Chat Completions Tool Calls，模型 ID 通过 `DEEPSEEK_MODEL` 配置。
 - 天气：Open-Meteo。
 - 测试：Vitest、Testing Library、Playwright。
 - 部署：Netlify。
 
-不在代码中固定某个“永久免费的”模型名称。启动时校验 `GEMINI_MODEL`，README 记录当前测试过的免费层模型；无可用模型时自动使用演示模式。
+默认模型为 `deepseek-flash`，可通过 `DEEPSEEK_MODEL` 覆盖。DeepSeek API 按 Token 计费，不描述为永久免费；无 Key 或模型不可用时自动使用规则模式。
 
 ### 10.2 仓库结构
 
@@ -527,8 +527,8 @@ Weekend Merge 使用独立仓库和独立 Netlify 站点，不并入个人简历
 
 - 应用仓库：`https://github.com/wml516518/weekend-merge`。
 - 应用部署：Netlify Production Site，构建命令为 `npm run build`，发布目录为 `dist`，Functions 目录为 `netlify/functions`。
-- 服务端密钥：`GEMINI_API_KEY` 和 `GEMINI_MODEL` 仅配置在 Weekend Merge 的 Netlify 环境变量中。
-- 无密钥或模型不可用时：线上站点仍可进入明确标记的演示/规则模式，不得把规则结果伪装为 Gemini 结果。
+- 服务端密钥：`DEEPSEEK_API_KEY` 和 `DEEPSEEK_MODEL` 仅配置在 Weekend Merge 的 Netlify 环境变量中。
+- 无密钥或模型不可用时：线上站点仍可进入明确标记的演示/规则模式，不得把规则结果伪装为 DeepSeek 结果。
 - 简历集成：在个人主页的中英文“项目”列表和中英文“项目经验”中都增加 Weekend Merge。
 - 项目入口：个人主页同时提供独立 Netlify Demo 链接和 GitHub 仓库链接，均在新标签页打开。
 - 发布顺序：先发布并验证 Weekend Merge，再把确认可访问的生产 URL 写入个人简历站点，最后重新发布简历站点。
@@ -564,7 +564,7 @@ Weekend Merge 使用独立仓库和独立 Netlify 站点，不并入个人简历
 
 ## 12. 隐私、安全与可观察性
 
-- Gemini API Key 只保存在服务端环境变量中。
+- DeepSeek API Key 只保存在服务端环境变量中。
 - 不收集姓名、联系方式或精确住址。
 - 自由文本在服务端限制长度并进行日志脱敏。
 - 日志记录 `runId`、状态、工具名、耗时、成功/失败和脱敏摘要。
@@ -583,7 +583,7 @@ Weekend Merge 使用独立仓库和独立 Netlify 站点，不并入个人简历
 | 地图 | OpenStreetMap 瓦片 | 仅低流量正常交互；显示署名、遵守缓存策略、禁止批量下载 |
 | 地点 | 仓库内 JSON | 免费且稳定；需要人工维护来源和验证日期 |
 | 路线 | 本地估算 | 免费；必须声明非实时导航 |
-| 模型 | Gemini 免费层 | 模型和额度会变化；免费层数据政策与付费层不同 |
+| 模型 | DeepSeek API | 按 Token 计费；价格、模型和额度会变化 |
 | 部署 | Netlify Free | 有每月硬上限；达到上限会暂停站点，不应描述为无限免费 |
 
 官方参考：
@@ -591,8 +591,8 @@ Weekend Merge 使用独立仓库和独立 Netlify 站点，不并入个人简历
 - Open-Meteo：https://open-meteo.com/
 - OpenStreetMap Tile Usage Policy：https://operations.osmfoundation.org/policies/tiles/
 - Nominatim Usage Policy：https://operations.osmfoundation.org/policies/nominatim/
-- Gemini API Pricing：https://ai.google.dev/gemini-api/docs/pricing
-- Gemini Function Calling：https://ai.google.dev/gemini-api/docs/tools
+- DeepSeek API Pricing：https://api-docs.deepseek.com/quick_start/pricing/
+- DeepSeek Tool Calls：https://api-docs.deepseek.com/guides/tool_calls/
 - Netlify Pricing：https://www.netlify.com/pricing/
 
 MVP 不使用公共 Nominatim 做自动补全或系统性 POI 搜索。
@@ -651,8 +651,8 @@ MVP 不使用公共 Nominatim 做自动补全或系统性 POI 搜索。
 
 - Weekend Merge 的生产 URL 可以直接访问，刷新任意前端路由不会返回 404。
 - `/.netlify/functions/plan` 和 `/.netlify/functions/replan` 仅接受约定方法，并返回符合共享 Schema 的事件或结构化错误。
-- 浏览器构建产物和网络响应不包含 `GEMINI_API_KEY`。
-- 未配置 Gemini 时，生产站点仍可完成固定演示流程，并明确显示降级状态。
+- 浏览器构建产物和网络响应不包含 `DEEPSEEK_API_KEY`。
+- 未配置 DeepSeek 时，生产站点仍可完成固定演示流程，并明确显示降级状态。
 - 个人主页中英文“项目”列表均展示 Weekend Merge 的 Live 与 GitHub 入口。
 - 个人主页中英文“项目经验”均包含 Agent 状态机、工具调用、局部重排和降级能力的简历级说明。
 - 两个站点分别通过桌面与移动端检查，链接无误且不存在文字溢出或控件遮挡。
@@ -664,7 +664,7 @@ MVP 不使用公共 Nominatim 做自动补全或系统性 POI 搜索。
 - 共享类型与 Zod Schema。
 - Netlify Functions 与 NDJSON 流式协议。
 - 状态机和 5 个工具。
-- Gemini Function Calling、规则降级和错误处理。
+- DeepSeek Tool Calls、规则降级和错误处理。
 - 工具与 Agent 场景测试、部署环境配置。
 
 ### 15.2 前端体验负责人
@@ -699,7 +699,7 @@ MVP 不使用公共 Nominatim 做自动补全或系统性 POI 搜索。
 
 ### Day 2：真实 Agent 联调
 
-- 接入 Gemini 与 Open-Meteo。
+- 接入 DeepSeek 与 Open-Meteo。
 - 接通 NDJSON 流式事件。
 - 完成局部重排、失败降级和移动端交互。
 - 部署 Netlify Preview 进行联合验收。

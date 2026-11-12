@@ -1,6 +1,6 @@
 # 本地 Agent 演示
 
-在项目根目录操作。需要 Node.js 22+ 和已安装的 Netlify CLI；只有把固定请求转换为实时请求或运行锁定冲突示例时才需要 `jq`。先运行 `npm install`，然后在单独终端运行 `netlify dev`；以下命令使用其默认地址 `http://localhost:8888`。这些命令会调用本地 Function；仅在配置 Gemini 后，实时规划才会请求模型。演示日期和地点是固定样例，实际出行前需重新核对。
+在项目根目录操作。需要 Node.js 22+ 和已安装的 Netlify CLI；只有把固定请求转换为实时请求或运行锁定冲突示例时才需要 `jq`。先运行 `npm install`，然后在单独终端运行 `netlify dev`；以下命令使用其默认地址 `http://localhost:8888`。这些命令会调用本地 Function；仅在配置 DeepSeek 后，实时规划才会请求模型。演示日期和地点是固定样例，实际出行前需重新核对。
 
 ## 固定规划事件
 
@@ -16,10 +16,10 @@ curl -sS -N -X POST 'http://localhost:8888/.netlify/functions/plan' \
 
 ## 无密钥实时降级
 
-确保本地 `.env` 和 Netlify 站点配置中没有 Gemini 变量，再启动一个本地 Netlify 进程（先停止上一个进程）。将同一完整请求的 `mode` 改为 `live`。此路径不会调用模型或天气网络工具；事件会包含 `run.degraded`、`reason: "MODEL_UNAVAILABLE"` 和三个已验证的规则候选方案。
+确保本地 `.env` 和 Netlify 站点配置中没有 DeepSeek Key，再启动一个本地 Netlify 进程（先停止上一个进程）。将同一完整请求的 `mode` 改为 `live`。此路径不会调用模型或天气网络工具；事件会包含 `run.degraded`、`reason: "MODEL_UNAVAILABLE"` 和三个已验证的规则候选方案。
 
 ```bash
-env -u GEMINI_API_KEY -u GEMINI_MODEL netlify dev
+env -u DEEPSEEK_API_KEY -u DEEPSEEK_MODEL netlify dev
 ```
 
 ```bash
@@ -28,7 +28,7 @@ jq '.mode = "live"' tests/fixtures/plan-request.demo.json | \
     -H 'Content-Type: application/json' --data-binary @-
 ```
 
-实时有密钥模式需在 Function 服务端配置 `GEMINI_API_KEY` 和 `GEMINI_MODEL`。API Key 不能放在 `VITE_` 变量中。可用的五个工具为 `get_weather`、`search_places`、`estimate_route`、`calculate_budget`、`validate_plan`；天气查询范围由服务端从请求设定推导为上海人民广场与指定日期时间。Open-Meteo 不可用时不会生成虚构天气。
+实时有密钥模式需在 Function 服务端配置 `DEEPSEEK_API_KEY`；可选配置 `DEEPSEEK_MODEL`，默认值为 `deepseek-flash`。API Key 不能放在 `VITE_` 变量中。可用的五个工具为 `get_weather`、`search_places`、`estimate_route`、`calculate_budget`、`validate_plan`；天气查询范围由服务端从请求设定推导为上海人民广场与指定日期时间。Open-Meteo 不可用时不会生成虚构天气。
 
 ## 否决并局部重排
 
@@ -92,7 +92,7 @@ curl -sS -N -X POST 'http://localhost:8888/.netlify/functions/replan' \
   -H 'Content-Type: application/json' --data-binary @/tmp/weekend-replan.json
 ```
 
-响应只有一个 `plan.proposed`。最后的 `run.completed.result` 有一个 `candidateIds` 元素和 `diff`；被锁定的 `stop-0`、`stop-3` 保持原样。可信客户端应将 `replanCount` 从 0 递增到 1 后停止；Function 仅验证传入值为 0 或 1，不保存会话历史，因此不能阻止重复传入同一计数。重排完全本地运行，不依赖 Gemini 或天气服务。
+响应只有一个 `plan.proposed`。最后的 `run.completed.result` 有一个 `candidateIds` 元素和 `diff`；被锁定的 `stop-0`、`stop-3` 保持原样。可信客户端应将 `replanCount` 从 0 递增到 1 后停止；Function 仅验证传入值为 0 或 1，不保存会话历史，因此不能阻止重复传入同一计数。重排完全本地运行，不依赖 DeepSeek 或天气服务。
 
 固定示例日期为周末 `2026-11-14`。HTTP 只接受上海今天至未来 180 天的周末，示例超期后请把两个请求中的 `setup.date` 改为有效周末；共享静态 Schema 不读取当前时间，因此 fixture 本身始终可测试。`plan` 可在模型等待期间逐行看到早期进度。相同 IP 与会话的实时请求每十分钟最多五次，超限返回可重试的 429；演示不占额度。
 
