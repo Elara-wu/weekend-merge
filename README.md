@@ -2,6 +2,9 @@
 
 一个面向两人周末决策的可观察 AI Agent。双方分别填写兴趣、预算和雷区，系统通过天气、地点、路线与预算工具生成三套折中方案；否决某一站后，只重新规划受影响区段。
 
+- [在线演示](https://weekend-merge-wml516518.netlify.app)
+- [个人主页中的项目介绍](https://menglong-build-log.netlify.app/#projects)
+
 ## 当前可用
 
 - 创建上海周末计划。
@@ -39,6 +42,8 @@ npm run build
 部署需提供 Node.js 22+、Netlify Functions，以及可选的服务端 Gemini 配置。`netlify.toml` 已设置构建命令和 Node 版本。调用天气工具时依赖 Open-Meteo 的可用性；服务配额和使用政策需按实际部署核对。
 
 ## Netlify 部署
+
+当前生产站点：[weekend-merge-wml516518.netlify.app](https://weekend-merge-wml516518.netlify.app)。未配置 Gemini Key 时也可完整体验演示流程，并可通过实时请求观察显式规则降级。
 
 从 GitHub 导入 `wml516518/weekend-merge`，生产分支选择 `main`。仓库中的 `netlify.toml` 已固定以下设置：
 
@@ -91,6 +96,6 @@ npm run build
 - [x] 响应式工作台与手机详情/轨迹切换
 - [x] 锁定保护、局部替换演示与差异显示
 - [x] 最终分享页与 PNG 长图
+- [x] Netlify 在线部署与个人主页集成
 - [ ] 浏览器工作台接入实时 Agent 与重排 API
 - [ ] Leaflet 真实地图
-- [ ] 在线部署
