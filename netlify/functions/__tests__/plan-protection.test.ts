@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import fixture from "../../tests/fixtures/plan-request.demo.json";
-import { AgentEventSchema } from "../../src/contracts/agent";
-import { createPlanHandler } from "./plan";
+import fixture from "../../../tests/fixtures/plan-request.demo.json";
+import { AgentEventSchema } from "../../../src/contracts/agent";
+import { createPlanHandler } from "../plan";
 
 const now = () => new Date("2026-11-12T16:30:00Z"); // Shanghai Nov 13
 const post = (body: unknown, headers?: HeadersInit) => new Request("http://localhost/plan", { method: "POST", body: JSON.stringify(body), headers });
