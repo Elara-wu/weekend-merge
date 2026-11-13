@@ -144,6 +144,24 @@ describe("controlled planning orchestrator", () => {
     expect(events.some((event) => event.type === "run.degraded")).toBe(false);
   });
 
+  it("normalizes null optional place filters to their safe defaults", async () => {
+    const deps = dependencies();
+    vi.spyOn(deps.tools, "search_places");
+    const script = scripted([{
+      type: "tool_call", id: "places-null-optionals", name: "search_places",
+      args: {
+        requiredTags: ["展览"], excludedTags: null, maxPricePerPerson: null,
+        indoorPreference: null, areas: null, openBetween: null, limit: null,
+      },
+    }, final]);
+    const events = await runPlanningAgent(request, { ...deps, model: script.model });
+    expect(deps.tools.search_places).toHaveBeenCalledWith({
+      requiredTags: ["展览"], excludedTags: [], indoorPreference: "any", areas: [], limit: 10,
+    });
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool.completed", tool: "search_places" }));
+    expect(events.some((event) => event.type === "run.degraded")).toBe(false);
+  });
+
   it.each([
     ["shell", {}, "UNKNOWN_TOOL", "unknown"],
     ["toString", {}, "UNKNOWN_TOOL", "unknown"],

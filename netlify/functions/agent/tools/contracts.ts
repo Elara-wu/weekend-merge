@@ -52,19 +52,19 @@ export const PlaceListSchema = z.array(PlaceSchema).superRefine((places, context
 });
 
 export const SearchPlacesInputSchema = z.object({
-  requiredTags: z.array(z.string().min(1)).default([]),
-  excludedTags: z.array(z.string().min(1)).default([]),
-  maxPricePerPerson: z.number().finite().nonnegative().optional(),
-  indoorPreference: z.enum(["indoor", "outdoor", "any"]).default("any"),
-  areas: z.array(z.string().min(1)).default([]),
+  requiredTags: z.array(z.string().min(1)).nullish().transform((value) => value ?? []),
+  excludedTags: z.array(z.string().min(1)).nullish().transform((value) => value ?? []),
+  maxPricePerPerson: z.number().finite().nonnegative().nullish().transform((value) => value ?? undefined),
+  indoorPreference: z.enum(["indoor", "outdoor", "any"]).nullish().transform((value) => value ?? "any"),
+  areas: z.array(z.string().min(1)).nullish().transform((value) => value ?? []),
   openBetween: z.object({
     start: z.string().datetime({ offset: true }),
     end: z.string().datetime({ offset: true }),
   }).refine(({ start, end }) => {
     const duration = Date.parse(end) - Date.parse(start);
     return duration > 0 && duration <= 24 * 60 * 60 * 1000;
-  }, "Opening interval must be positive and no longer than one day").optional(),
-  limit: z.number().int().min(1).max(50).default(10),
+  }, "Opening interval must be positive and no longer than one day").nullish().transform((value) => value ?? undefined),
+  limit: z.number().int().min(1).max(50).nullish().transform((value) => value ?? 10),
 });
 
 export const SearchPlacesOutputSchema = z.object({
