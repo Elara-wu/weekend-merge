@@ -28,7 +28,7 @@ npm install
 npm run dev
 ```
 
-Vite 前端默认位于 `http://localhost:5173`，目前无需密钥。要在本地调用 Netlify Functions，另需安装 Netlify CLI 并在项目目录运行 `netlify dev`；其默认代理地址为 `http://localhost:8888`。完整请求和可执行的 `curl` 示例见 [演示步骤](docs/DEMO.md)。
+Vite 默认地址 `http://localhost:5173` 可体验首页演示。完整的实时规划和重排需要运行 Netlify Functions。安装 Netlify CLI 后在项目目录运行 `netlify dev`，通过其代理地址（默认 `http://localhost:8888`）进入。未配置模型密钥时，实时规划会显示规则降级。API 请求示例见 [演示步骤](docs/DEMO.md)。
 
 ```bash
 npm test -- --run
@@ -97,5 +97,5 @@ npm run build
 - [x] 锁定保护、局部替换演示与差异显示
 - [x] 最终分享页与 PNG 长图
 - [x] Netlify 在线部署与个人主页集成
-- [ ] 浏览器工作台接入实时 Agent 与重排 API
+- [x] 浏览器工作台接入实时 Agent 与重排 API
 - [ ] Leaflet 真实地图
