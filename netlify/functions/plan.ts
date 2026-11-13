@@ -1,6 +1,6 @@
 import { createDemoRun } from "../../src/demo/demoRun";
 import { PlanRequestSchema } from "../../src/contracts/agent";
-import { createGeminiModel } from "./agent/gemini";
+import { createDeepSeekModel } from "./agent/deepseek";
 import { jsonError, ndjsonStream, parseJsonRequest } from "./agent/http";
 import { planningClientKey, productionPlanningLimiter, validateRequestDate, type PlanningLimiter } from "./agent/requestProtection";
 import type { AgentModel } from "./agent/model";
@@ -10,7 +10,7 @@ import { createAgentTools } from "./agent/tools/registry";
 export function createPlanHandler(dependencies: {
   now?: () => Date;
   limiter?: PlanningLimiter;
-  env?: { GEMINI_API_KEY?: string; GEMINI_MODEL?: string };
+  env?: { DEEPSEEK_API_KEY?: string; DEEPSEEK_MODEL?: string };
   createModel?: (config: { apiKey: string; model: string }) => AgentModel;
 } = {}) {
   return async (request: Request): Promise<Response> => {
@@ -29,11 +29,11 @@ export function createPlanHandler(dependencies: {
         return ndjsonStream((emit) => { for (const event of createDemoRun({ runId: body.sessionId, at: `${body.setup.date}T00:00:00.000Z` })) emit(event); });
       }
       const env = dependencies.env ?? process.env;
-      const apiKey = env.GEMINI_API_KEY?.trim();
-      const modelName = env.GEMINI_MODEL?.trim();
+      const apiKey = env.DEEPSEEK_API_KEY?.trim();
+      const modelName = env.DEEPSEEK_MODEL?.trim() || "deepseek-flash";
       let model: AgentModel | undefined;
-      if (apiKey && modelName) {
-        try { model = (dependencies.createModel ?? createGeminiModel)({ apiKey, model: modelName }); }
+      if (apiKey) {
+        try { model = (dependencies.createModel ?? createDeepSeekModel)({ apiKey, model: modelName }); }
         catch { /* The orchestrator explicitly reports the missing model and uses rule plans. */ }
       }
       const tools = createAgentTools({ request: body });

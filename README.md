@@ -15,13 +15,13 @@
 - 切换方案，点赞、锁定、按理由局部替换，并保存协商状态。
 - 最终行程、PNG 长图和不含个人偏好的只读分享。
 - 浏览器刷新后恢复当前步骤。
-- `POST /.netlify/functions/plan` 支持演示模式和受控实时 Agent；未配置 Gemini 时会显式降级为确定性规则方案。
+- `POST /.netlify/functions/plan` 支持演示模式和受控实时 Agent；未配置 DeepSeek 时会显式降级为确定性规则方案。
 - `POST /.netlify/functions/replan` 支持保留锁定站点的局部重排，并返回变更差异。
 - 两个端点均使用共享 Schema 校验 NDJSON 事件；`plan` 逐行推送进度，`replan` 返回有界响应。
 
 ## 快速开始
 
-要求 Node.js 22 或更高版本（Gemini 官方 SDK 的运行要求）。
+要求 Node.js 22 或更高版本。
 
 ```bash
 npm install
@@ -37,13 +37,13 @@ npm run build
 
 ## 服务端配置
 
-`.env.example` 只列出变量名：`GEMINI_API_KEY` 和 `GEMINI_MODEL`。需要 Gemini 时将它们配置为 Netlify Function 的服务端环境变量；本地开发可放在未提交的 `.env` 中。两者都存在才会创建模型。不要使用 `VITE_` 前缀或将密钥放进浏览器代码。未配置或模型失败时，`mode: "live"` 会显式降级为规则规划；规则规划不请求天气，也不伪造预报。
+`.env.example` 列出 `DEEPSEEK_API_KEY` 和可选的 `DEEPSEEK_MODEL`。需要 DeepSeek 时将它们配置为 Netlify Function 的服务端环境变量；本地开发可放在未提交的 `.env` 中。`DEEPSEEK_MODEL` 未配置时默认使用 `deepseek-flash`。不要使用 `VITE_` 前缀或将密钥放进浏览器代码。未配置 Key 或模型失败时，`mode: "live"` 会显式降级为规则规划；规则规划不请求天气，也不伪造预报。
 
-部署需提供 Node.js 22+、Netlify Functions，以及可选的服务端 Gemini 配置。`netlify.toml` 已设置构建命令和 Node 版本。调用天气工具时依赖 Open-Meteo 的可用性；服务配额和使用政策需按实际部署核对。
+部署需提供 Node.js 22+、Netlify Functions，以及可选的服务端 DeepSeek 配置。`netlify.toml` 已设置构建命令和 Node 版本。DeepSeek API 按 Token 计费；调用天气工具时依赖 Open-Meteo 的可用性。服务价格、配额和使用政策需按实际部署核对。
 
 ## Netlify 部署
 
-当前生产站点：[weekend-merge-wml516518.netlify.app](https://weekend-merge-wml516518.netlify.app)。未配置 Gemini Key 时也可完整体验演示流程，并可通过实时请求观察显式规则降级。
+当前生产站点：[weekend-merge-wml516518.netlify.app](https://weekend-merge-wml516518.netlify.app)。未配置 DeepSeek Key 时也可完整体验演示流程，并可通过实时请求观察显式规则降级。
 
 从 GitHub 导入 `wml516518/weekend-merge`，生产分支选择 `main`。仓库中的 `netlify.toml` 已固定以下设置：
 
@@ -52,7 +52,7 @@ npm run build
 - Functions 目录：`netlify/functions`
 - Node.js 版本：`22`
 
-`GEMINI_API_KEY` 与 `GEMINI_MODEL` 只应配置为 Netlify Functions 的服务端环境变量，不能使用 `VITE_` 前缀。没有密钥时生产站仍可运行，并会明确降级到确定性规则规划；添加密钥后再启用 Gemini Function Calling。基础响应安全头由 `netlify.toml` 统一设置，CSP 将在地图瓦片来源确定后单独收紧。
+`DEEPSEEK_API_KEY` 与 `DEEPSEEK_MODEL` 只应配置为 Netlify Functions 的服务端环境变量，不能使用 `VITE_` 前缀。没有密钥时生产站仍可运行，并会明确降级到确定性规则规划；添加密钥后启用 DeepSeek Tool Calls。基础响应安全头由 `netlify.toml` 统一设置，CSP 将在地图瓦片来源确定后单独收紧。
 
 ## 接口与数据边界
 
@@ -61,13 +61,13 @@ npm run build
 | `src/contracts/agent.ts` | 前后端共享的请求、行程和事件 Schema |
 | `netlify/functions/plan.ts` | 演示/实时规划入口与 NDJSON 响应 |
 | `netlify/functions/replan.ts` | 确定性局部重排入口 |
-| `netlify/functions/agent/` | Gemini 适配器、状态机、规则降级与五个工具 |
+| `netlify/functions/agent/` | DeepSeek 适配器、状态机、规则降级与五个工具 |
 | `data/places.shanghai.json` | 带来源、开放时间及 `lastVerifiedAt` 的静态上海地点目录 |
 | `src/demo/demoRun.ts` | 前端展示 fixture，不保证地点 ID 均在服务端目录中 |
 
 请求体在 JSON 解析前按实际 UTF-8 字节数限制为 32 KiB，超限返回 `413 REQUEST_TOO_LARGE`。设定只接受周六/周日、3–12 小时（结束可为 `24:00`）及共享上海区域白名单；HTTP 另按上海日期检查今天至未来 180 天。兴趣仅限界面九项、最多五项；饮食/避让各最多十项、每项最多 30 字符，愿望最多 80 字符。
 
-实时 `plan` 按可信 Netlify IP（`x-nf-client-connection-ip`，其次首个 `x-forwarded-for`，最后 `unknown`）和已验证的 `sessionId` 组合，每十分钟最多五次；演示请求不占用额度。计数器为模块级内存，最多保存 5,000 个键，清除过期/最早记录。受限时在创建 Gemini 或调用天气前返回 `429 RATE_LIMITED`、`retryable: true`。这只是 **warm-instance guard**，不提供跨实例、重启后或更换会话的持久分布式限流；生产配额仍需在提供商或持久网关层配置。
+实时 `plan` 按可信 Netlify IP（`x-nf-client-connection-ip`，其次首个 `x-forwarded-for`，最后 `unknown`）和已验证的 `sessionId` 组合，每十分钟最多五次；演示请求不占用额度。计数器为模块级内存，最多保存 5,000 个键，清除过期/最早记录。受限时在创建 DeepSeek 模型或调用天气前返回 `429 RATE_LIMITED`、`retryable: true`。这只是 **warm-instance guard**，不提供跨实例、重启后或更换会话的持久分布式限流；生产配额仍需在提供商或持久网关层配置。
 
 重排支持可选 `reasonCode`：`CHANGE_PLACE`、`TOO_CROWDED`、`TOO_EXPENSIVE`、`TOO_MUCH_WALKING`、`PREFER_INDOOR`、`PREFER_OUTDOOR`、`CHANGE_ACTIVITY`。未提供时只按受支持中英文关键词解析；不识别的自由文本返回 `400 UNSUPPORTED_REPLAN_REASON`，不是通用自然语言理解。例：`不要再安排展览，想喝咖啡` 选择非展览咖啡地点，`想换成另一个展览` 选择另一展览。
 

@@ -57,10 +57,10 @@ describe("plan function", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it.each([{ GEMINI_API_KEY: "secret", GEMINI_MODEL: " " }, { GEMINI_API_KEY: " ", GEMINI_MODEL: "model" }])(
-    "does not construct Gemini with incomplete configuration", async (env) => {
+  it.each([{ DEEPSEEK_API_KEY: " " }, {}])(
+    "does not construct DeepSeek without an API key", async (env) => {
       let constructions = 0;
-      const response = await createPlanHandler({ now, limiter: createPlanningLimiter(), env, createModel: () => { constructions += 1; throw new Error("Must not construct Gemini"); } })(post({ ...demoRequest, mode: "live" }));
+      const response = await createPlanHandler({ now, limiter: createPlanningLimiter(), env, createModel: () => { constructions += 1; throw new Error("Must not construct DeepSeek"); } })(post({ ...demoRequest, mode: "live" }));
       const text = await response.text();
       expect(constructions).toBe(0);
       expect(response.status).toBe(200);
@@ -72,7 +72,7 @@ describe("plan function", () => {
   it("uses the configured model with a server-owned registry", async () => {
     let turns = 0;
     const response = await createPlanHandler({ now, limiter: createPlanningLimiter(),
-      env: { GEMINI_API_KEY: "test-key", GEMINI_MODEL: "test-model" },
+      env: { DEEPSEEK_API_KEY: "test-key", DEEPSEEK_MODEL: "test-model" },
       createModel: () => ({ next: async () => { turns += 1; throw new Error("Unavailable test model"); } }),
     })(post({ ...demoRequest, mode: "live", places: [], tools: { validate_plan: "fake" } }));
     const text = await response.text();
@@ -82,7 +82,7 @@ describe("plan function", () => {
   });
 
   it("degrades a model-construction failure without exposing configuration or the raw error", async () => {
-    const response = await createPlanHandler({ now, limiter: createPlanningLimiter(), env: { GEMINI_API_KEY: "secret-key", GEMINI_MODEL: "test-model" },
+    const response = await createPlanHandler({ now, limiter: createPlanningLimiter(), env: { DEEPSEEK_API_KEY: "secret-key", DEEPSEEK_MODEL: "test-model" },
       createModel: () => { throw new Error("private SDK construction failure secret-key"); },
     })(post({ ...demoRequest, mode: "live" }));
     const text = await response.text();

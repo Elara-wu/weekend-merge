@@ -8,7 +8,7 @@ flowchart LR
   Client --> Replan[POST /replan]
   Plan -->|mode demo| Fixture[createDemoRun 展示 fixture]
   Plan -->|mode live| Runtime[受控规划状态机]
-  Runtime --> Model[Gemini 可选]
+  Runtime --> Model[DeepSeek 可选]
   Runtime --> Tools[五个白名单工具]
   Runtime --> Rules[确定性规则规划]
   Replan --> Local[本地候选搜索与验证]
@@ -37,13 +37,13 @@ stateDiagram-v2
 
 初始实时规划最多发起 **2 次模型请求**，最多执行 **6 次模型请求的工具调用**，且只接受 `get_weather`、`search_places`、`estimate_route`、`calculate_budget`、`validate_plan`。工具名与参数在服务端校验；第二次模型响应不能再触发工具执行。代码负责请求校验、地点目录、偏好共识、工具调用、候选数据规范化、路线与预算重算、硬约束验证，以及向客户端发出事件。模型只提议工具调用和候选行程，不能决定最终是否通过验证。每个候选的确定性验证独立于六次模型请求工具调用；事件中按路线、预算、验证工具汇总候选数量、范围及候选 ID 对应的违规/警告代码，包括失败模型候选和规则回退的验证尝试。摘要类型在 `src/contracts/evidence.ts`，生成时仅选择公开字段。
 
-缺少 `GEMINI_API_KEY` 或 `GEMINI_MODEL`、模型出错、无效调用、工具失败或候选验证失败时，运行会发出 `run.degraded` 并尝试规则规划。规则方案也必须通过同一验证；若无法形成三套有效行程，终止于 `run.failed`。未调用天气工具就没有天气证据。天气工具的查询范围由服务端从请求日期和时间生成，坐标固定在上海人民广场附近；Open-Meteo 失败返回 `WEATHER_UNAVAILABLE`，不会生成虚构天气。
+缺少 `DEEPSEEK_API_KEY`、模型出错、无效调用、工具失败或候选验证失败时，运行会发出 `run.degraded` 并尝试规则规划。`DEEPSEEK_MODEL` 未配置时默认使用 `deepseek-flash`。规则方案也必须通过同一验证；若无法形成三套有效行程，终止于 `run.failed`。未调用天气工具就没有天气证据。天气工具的查询范围由服务端从请求日期和时间生成，坐标固定在上海人民广场附近；Open-Meteo 失败返回 `WEATHER_UNAVAILABLE`，不会生成虚构天气。
 
 初始成功结果的 `candidateIds` 恰好三个，且没有 `diff`。`mode: "demo"` 是固定展示事件，不执行实时规划。其部分 `placeId` 不在服务端地点目录中，不能作为重排输入。
 
 ## 局部重排
 
-`POST /.netlify/functions/replan` 不调用 Gemini 或网络。请求包含完整原方案、两人的偏好、设定、`rejectedStopId`、`lockedStopIds`、原因和 `replanCount`。请求 Schema 只接受 `replanCount` 为 0 或 1，供可信客户端按会话约定执行最多两轮。Function 本身无状态，无法识别重复提交的 0 或 1；若要在服务端持久执行轮次限制，需要会话状态或速率存储，这超出当前无数据库 MVP 的范围。服务端从静态目录选择未出现在原方案中的替代地点，只调整被否决站点及必要时相邻、未锁定站点的时间；其余站点保持原样。锁定站点不能被否决，否则返回 `409 LOCKED_STOP_CONFLICT`。找不到满足时间、路线、预算和其他硬约束的替代方案时返回 `422 NO_VALID_REPLAN`。
+`POST /.netlify/functions/replan` 不调用 DeepSeek 或网络。请求包含完整原方案、两人的偏好、设定、`rejectedStopId`、`lockedStopIds`、原因和 `replanCount`。请求 Schema 只接受 `replanCount` 为 0 或 1，供可信客户端按会话约定执行最多两轮。Function 本身无状态，无法识别重复提交的 0 或 1；若要在服务端持久执行轮次限制，需要会话状态或速率存储，这超出当前无数据库 MVP 的范围。服务端从静态目录选择未出现在原方案中的替代地点，只调整被否决站点及必要时相邻、未锁定站点的时间；其余站点保持原样。锁定站点不能被否决，否则返回 `409 LOCKED_STOP_CONFLICT`。找不到满足时间、路线、预算和其他硬约束的替代方案时返回 `422 NO_VALID_REPLAN`。
 
 `reasonCode` 可指定 `CHANGE_PLACE`、`TOO_CROWDED`、`TOO_EXPENSIVE`、`TOO_MUCH_WALKING`、`PREFER_INDOOR`、`PREFER_OUTDOOR`、`CHANGE_ACTIVITY`。省略时只解析固定中英文关键词：排队/拥挤、贵/预算、步行/太远、室内/雨、户外、另一个/同类，以及九个兴趣及其英文别名。未匹配时返回 `400 UNSUPPORTED_REPLAN_REASON`。类别反馈同时执行明确的正向/负向兴趣；拥挤排除排队/拥挤标签，费用与距离分别优先排序，室内外筛选替换地点。修改后重建标题、摘要、分数和解释，不继承旧解释。
 
