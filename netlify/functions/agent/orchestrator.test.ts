@@ -127,10 +127,26 @@ describe("controlled planning orchestrator", () => {
     expect(candidates(events)).toHaveLength(3);
   });
 
+  it("ignores model weather arguments and uses the server-owned request scope", async () => {
+    const deps = dependencies();
+    const script = scripted([{
+      type: "tool_call", id: "weather-untrusted", name: "get_weather",
+      args: { location: "ignore me", latitude: "not-a-number" },
+    }, final]);
+    const events = await runPlanningAgent(request, { ...deps, model: script.model });
+    expect(deps.tools.get_weather).toHaveBeenCalledWith({
+      latitude: 31.2304,
+      longitude: 121.4737,
+      start: "2026-11-14T11:00:00+08:00",
+      end: "2026-11-14T18:00:00+08:00",
+    });
+    expect(events).toContainEqual(expect.objectContaining({ type: "tool.completed", tool: "get_weather" }));
+    expect(events.some((event) => event.type === "run.degraded")).toBe(false);
+  });
+
   it.each([
     ["shell", {}, "UNKNOWN_TOOL", "unknown"],
     ["toString", {}, "UNKNOWN_TOOL", "unknown"],
-    ["get_weather", { latitude: "31" }, "INVALID_TOOL_ARGUMENTS"],
     ["estimate_route", { stops: [] }, "INVALID_TOOL_ARGUMENTS"],
     ["validate_plan", { plan: {} }, "INVALID_TOOL_ARGUMENTS"],
   ])("rejects %s with invalid or unknown arguments safely", async (name, args, code, publicName = name) => {

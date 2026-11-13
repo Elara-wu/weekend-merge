@@ -81,7 +81,7 @@ export async function runPlanningAgent(input: PlanRequest, dependencies: {
           if (index >= 6) code = "TOOL_LIMIT_EXCEEDED";
           else if (!name.success) code = "UNKNOWN_TOOL";
           else if (ids.has(call.id)) code = "DUPLICATE_TOOL_CALL_ID";
-          else if (!toolInputSchemas[name.data].safeParse(call.args).success) code = "INVALID_TOOL_ARGUMENTS";
+          else if (name.data !== "get_weather" && !toolInputSchemas[name.data].safeParse(call.args).success) code = "INVALID_TOOL_ARGUMENTS";
           if (code || !name.success) {
             emit({ type: "tool.failed", tool: name.success ? name.data : "unknown", code: code ?? "UNKNOWN_TOOL", retryable: false });
             throw new PlanningError(code ?? "UNKNOWN_TOOL");
